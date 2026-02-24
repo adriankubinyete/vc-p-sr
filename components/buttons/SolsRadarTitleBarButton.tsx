@@ -4,33 +4,36 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
-import { showToast, Toasts } from "@webpack/common";
-import React from "react";
+import { findComponentByCodeLazy } from "@webpack";
+import { React,showToast, Toasts } from "@webpack/common";
 
 import { settings } from "../../settings";
-import { SolsRadarIcon } from "./SolsRadarIcon";
+import { openSolsRadarModal } from "../settings/SolsRadarModal";
+import { SolsRadarIcon } from "../ui/SolsRadarIcon";
+
+const HeaderBarIcon = findComponentByCodeLazy(".HEADER_BAR_BADGE_TOP:", '"aria-haspopup":');
 
 const STATE_COLORS = {
     ACTIVE: "#43a25a",
     INACTIVE: "#f04747",
 };
 
-export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => {
-    // Lê estados reativamente → causa re-render quando mudam
+interface SolsRadarTitleBarButtonProps {
+    className?: string;
+}
+
+export function SolsRadarTitleBarButton({ className = "" }: SolsRadarTitleBarButtonProps) {
     const { autoJoinEnabled, notificationEnabled, pluginIconShortcutAction } = settings.use([
         "autoJoinEnabled",
         "notificationEnabled",
         "pluginIconShortcutAction",
     ]);
 
-    if (!isMainChat || settings.store.pluginIconLocation !== "chatbar") return null;
-
-    const isActive = autoJoinEnabled; // ou ajuste a lógica se quiser considerar notificationEnabled também
+    const isActive = autoJoinEnabled;
+    const stateText = isActive ? "ACTIVE" : "INACTIVE";
 
     const handleClick = () => {
-        // openModal(props => <PluginModal rootProps={props} />);
-        console.log("Chat bar icon clicked – abrir modal aqui");
+        openSolsRadarModal();
     };
 
     const handleContextMenu = (e: React.MouseEvent<HTMLElement>) => {
@@ -55,7 +58,7 @@ export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => 
                 break;
 
             case "toggle_both":
-                const newState = !autoJoinEnabled; // usa autoJoin como referência
+                const newState = !autoJoinEnabled;
                 settings.store.autoJoinEnabled = newState;
                 settings.store.notificationEnabled = newState;
                 message = `Auto-join and notifications ${newState ? "enabled" : "disabled"}!`;
@@ -63,7 +66,6 @@ export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => 
                 break;
 
             default:
-                // sem ação → toast neutro
                 break;
         }
 
@@ -73,34 +75,34 @@ export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => 
     };
 
     return (
-        <ChatBarButton
-            tooltip={`SolRadar ${isActive ? "(ACTIVE)" : "(INACTIVE)"}`}
+        <HeaderBarIcon
+            className={`${className}`}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
-            buttonProps={{
-                "aria-haspopup": "dialog",
-                style: { position: "relative" },
-            }}
-        >
-            <div style={{ position: "relative", display: "inline-block" }}>
-                <SolsRadarIcon />
+            tooltip={`SolRadar (${stateText})`}
+            aria-haspopup="dialog"
+            icon={() => (
+                <div style={{ position: "relative", display: "inline-block" }}>
+                    <SolsRadarIcon height={20} width={20} />
 
-                {/* indicator */}
-                <div
-                    style={{
-                        position: "absolute",
-                        right: -6,
-                        bottom: -6,
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        backgroundColor: isActive ? STATE_COLORS.ACTIVE : STATE_COLORS.INACTIVE,
-                        border: "1.5px solid var(--background-primary)",
-                        boxShadow: "0 0 3px rgba(0,0,0,0.3)",
-                        transform: "scale(0.7)",
-                    }}
-                />
-            </div>
-        </ChatBarButton>
+                    {/* indicator */}
+                    <div
+                        style={{
+                            position: "absolute",
+                            right: 4,
+                            bottom: 4,
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            backgroundColor: isActive ? STATE_COLORS.ACTIVE : STATE_COLORS.INACTIVE,
+                            border: "1.5px solid var(--background-primary)",
+                            boxShadow: "0 0 3px rgba(0,0,0,0.3)",
+                            transform: "scale(0.7)",
+                        }}
+                    />
+                </div>
+            )}
+            selected={isActive}
+        />
     );
-};
+}

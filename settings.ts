@@ -37,6 +37,5 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Global notification state. Takes precedence over the trigger-specific setting.",
         default: false
-
     }
 });

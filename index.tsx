@@ -5,16 +5,15 @@
  */
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { PropsWithChildren } from "react";
 
-import { SolsRadarChatBarButton } from "./components/ui/SolsRadarChatBarButton";
+import { SolsRadarChatBarButton } from "./components/buttons/SolsRadarChatBarButton";
+import { SolsRadarTitleBarButton } from "./components/buttons/SolsRadarTitleBarButton";
 import { SolsRadarIcon } from "./components/ui/SolsRadarIcon";
-import { SolsRadarTitleBarButton } from "./components/ui/SolsRadarTitleBarButton";
 import { settings } from "./settings";
 
-const logger = new Logger("SOLRADAR::");
+// const logger = new Logger("SOLRADAR::");
 
 export default definePlugin({
     name: "SRadar",

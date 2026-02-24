@@ -4,127 +4,190 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { React } from "@webpack/common";
+import { Button } from "@components/Button";
+import { Paragraph } from "@components/Paragraph";
+import { React, showToast, Toasts, useRef } from "@webpack/common";
 
-import { openAddTriggerModal, openEditTriggerModal, Trigger } from "./TriggerModal";
+import {
+    downloadTriggersJson,
+    importTriggersFromJson,
+    toggleTrigger,
+    Trigger,
+    TriggerType,
+    useTriggers,
+} from "../../../../stores/TriggerStore";
+import { openAddTriggerModal, openEditTriggerModal } from "./TriggerModal";
 
-// ─── Mock data — substitua pela sua store/state real ─────────────────────────
+// ─── Helpers visuais ──────────────────────────────────────────────────────────
 
-const MOCK_TRIGGERS: Trigger[] = [
-    { id: "1", name: "Boss Spawn", keyword: "boss has spawned", enabled: true },
-    { id: "2", name: "Rare Item", keyword: "rare item dropped", enabled: false },
-];
-
-// ─── Estilos ──────────────────────────────────────────────────────────────────
-
-const styles = {
-    container: {
-        display: "flex",
-        flexDirection: "column" as const,
-        gap: 8,
-    },
-    header: {
-        display: "flex",
-        justifyContent: "flex-end",
-        marginBottom: 4,
-    },
-    btnAdd: {
-        padding: "7px 14px",
-        borderRadius: 4,
-        border: "none",
-        background: "var(--brand-500)",
-        color: "#fff",
-        cursor: "pointer",
-        fontSize: 13,
-        fontWeight: 600,
-    },
-    empty: {
-        color: "var(--text-muted)",
-        textAlign: "center" as const,
-        marginTop: 32,
-    },
-    card: {
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "10px 14px",
-        borderRadius: 8,
-        background: "var(--background-secondary)",
-        cursor: "pointer",
-        border: "1px solid transparent",
-        transition: "border-color 0.15s, background 0.15s",
-    },
-    cardLeft: {
-        display: "flex",
-        flexDirection: "column" as const,
-        gap: 2,
-    },
-    triggerName: {
-        color: "var(--text-normal)",
-        fontWeight: 600,
-        fontSize: 14,
-    },
-    keyword: {
-        color: "var(--text-muted)",
-        fontSize: 12,
-        fontFamily: "monospace",
-    },
-    badge: (enabled: boolean): React.CSSProperties => ({
-        padding: "2px 8px",
-        borderRadius: 999,
-        fontSize: 11,
-        fontWeight: 700,
-        background: enabled ? "var(--green-360)" : "var(--background-modifier-accent)",
-        color: enabled ? "#fff" : "var(--text-muted)",
-    }),
+const TYPE_LABELS: Record<TriggerType, string> = {
+    BIOME: "Biome",
+    RARE_BIOME: "Rare Biome",
+    WEATHER: "Weather",
+    MERCHANT: "Merchant",
+    CUSTOM: "Custom",
 };
 
-// ─── Card individual ──────────────────────────────────────────────────────────
+const TYPE_COLORS: Record<TriggerType, string> = {
+    BIOME: "var(--blue-345)",
+    RARE_BIOME: "var(--pink-400)",
+    WEATHER: "var(--green-360)",
+    MERCHANT: "var(--yellow-300)",
+    CUSTOM: "var(--text-muted)",
+};
+
+// ─── Estilos — só layout de card e lista, sem equivalente nativo ──────────────
+
+const s = {
+    toolbar: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 12,
+        gap: 8,
+    },
+    toolbarRight: { display: "flex", gap: 6 },
+    list: { display: "flex", flexDirection: "column" as const, gap: 8 },
+    empty: { textAlign: "center" as const, marginTop: 40 },
+
+    card: (enabled: boolean): React.CSSProperties => ({
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 14px",
+        borderRadius: 8,
+        background: enabled ? "rgba(67, 162, 90, 0.10)" : "var(--background-secondary)",
+        border: `1px solid ${enabled ? "rgba(67, 162, 90, 0.30)" : "var(--background-modifier-accent)"}`,
+        transition: "background 0.2s, border-color 0.2s",
+    }),
+    cardIcon: {
+        width: 36, height: 36, borderRadius: 8,
+        flexShrink: 0, objectFit: "cover" as const,
+    },
+    cardIconPlaceholder: (color: string): React.CSSProperties => ({
+        width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+        background: color, color: "#fff",
+        fontSize: 15, fontWeight: 700,
+        display: "flex", alignItems: "center", justifyContent: "center",
+    }),
+    cardBody: {
+        flex: 1, display: "flex", flexDirection: "column" as const,
+        gap: 2, minWidth: 0,
+    },
+    cardName: {
+        color: "var(--text-normal)", fontWeight: 600, fontSize: 14,
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
+    },
+    cardType: (color: string): React.CSSProperties => ({
+        display: "inline-block",
+        padding: "1px 8px", borderRadius: 999,
+        background: `color-mix(in srgb, ${color} 15%, transparent)`,
+        color, fontSize: 11, fontWeight: 700, alignSelf: "flex-start",
+    }),
+    cardActions: { display: "flex", gap: 6, alignItems: "center", flexShrink: 0 },
+};
+
+// ─── Card ─────────────────────────────────────────────────────────────────────
 
 function TriggerCard({ trigger }: { trigger: Trigger; }) {
+    const color = TYPE_COLORS[trigger.type];
+    const label = TYPE_LABELS[trigger.type];
+    const initial = trigger.name.charAt(0).toUpperCase();
+
     return (
-        <div
-            style={styles.card}
-            onClick={() => openEditTriggerModal(trigger)}
-            onMouseEnter={e => {
-                (e.currentTarget as HTMLDivElement).style.borderColor = "var(--brand-500)";
-                (e.currentTarget as HTMLDivElement).style.background = "var(--background-modifier-hover)";
-            }}
-            onMouseLeave={e => {
-                (e.currentTarget as HTMLDivElement).style.borderColor = "transparent";
-                (e.currentTarget as HTMLDivElement).style.background = "var(--background-secondary)";
-            }}
-        >
-            <div style={styles.cardLeft}>
-                <span style={styles.triggerName}>{trigger.name}</span>
-                <span style={styles.keyword}>"{trigger.keyword}"</span>
+        <div style={s.card(trigger.state.enabled)}>
+            {trigger.icon_url
+                ? <img src={trigger.icon_url} alt="" style={s.cardIcon} />
+                : <div style={s.cardIconPlaceholder(color)}>{initial}</div>
+            }
+
+            <div style={s.cardBody}>
+                <span style={s.cardName}>{trigger.name}</span>
+                <span style={s.cardType(color)}>{label}</span>
             </div>
-            <span style={styles.badge(trigger.enabled)}>
-                {trigger.enabled ? "ON" : "OFF"}
-            </span>
+
+            <div style={s.cardActions}>
+                {/* Toggle ON/OFF — positive quando ativo, secondary outline quando inativo */}
+                <Button
+                    size="small"
+                    variant={trigger.state.enabled ? "positive" : "secondary"}
+                    onClick={() => toggleTrigger(trigger.id)}
+                >
+                    {trigger.state.enabled ? "ON" : "OFF"}
+                </Button>
+
+                <Button
+                    size="small"
+                    variant="secondary"
+                    onClick={() => openEditTriggerModal(trigger)}
+                >
+                    Edit
+                </Button>
+            </div>
         </div>
     );
 }
 
-// ─── Tab principal ────────────────────────────────────────────────────────────
+// ─── Tab ──────────────────────────────────────────────────────────────────────
 
 export function TriggersTab() {
-    // Substitua MOCK_TRIGGERS pela sua store/state real
-    const triggers = MOCK_TRIGGERS;
+    const triggers = useTriggers();
+    const importRef = useRef<HTMLInputElement>(null);
+
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async ev => {
+            const result = await importTriggersFromJson(ev.target?.result as string, "merge");
+            if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
+            else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
+        };
+        reader.readAsText(file);
+        e.target.value = "";
+    };
 
     return (
-        <div style={styles.container}>
-            <div style={styles.header}>
-                <button style={styles.btnAdd} onClick={() => openAddTriggerModal()}>
-                    + Add Trigger
-                </button>
+        <div>
+            <div style={s.toolbar}>
+                <Paragraph>{triggers.length} trigger{triggers.length !== 1 ? "s" : ""}</Paragraph>
+
+                <div style={s.toolbarRight}>
+                    <Button size="small" variant="secondary" onClick={downloadTriggersJson}>
+                        Export
+                    </Button>
+                    <Button size="small" variant="secondary" onClick={() => importRef.current?.click()}>
+                        Import
+                    </Button>
+                    <Button size="small" variant="primary" onClick={openAddTriggerModal}>
+                        + Add Trigger
+                    </Button>
+                </div>
             </div>
 
+            {/* Input de importação oculto */}
+            <input
+                ref={importRef}
+                type="file"
+                accept=".json,application/json"
+                style={{ display: "none" }}
+                onChange={handleImport}
+            />
+
+            {/* Lista */}
             {triggers.length === 0
-                ? <p style={styles.empty}>No triggers configured. Click "+ Add Trigger" to create one.</p>
-                : triggers.map(trigger => (
-                    <TriggerCard key={trigger.id} trigger={trigger} />
-                ))
+                ? (
+                    <div style={s.empty}>
+                        <Paragraph>
+                            No triggers yet. Click "+ Add Trigger" or import a JSON file to get started.
+                        </Paragraph>
+                    </div>
+                )
+                : (
+                    <div style={s.list}>
+                        {triggers.map(t => <TriggerCard key={t.id} trigger={t} />)}
+                    </div>
+                )
             }
         </div>
     );

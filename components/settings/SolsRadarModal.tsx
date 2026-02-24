@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ModalCloseButton, ModalContent, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
+import { Heading } from "@components/Heading";
+import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { React } from "@webpack/common";
 
 import { RecentJoinsTab } from "./tabs/recentJoins";
@@ -75,22 +76,30 @@ export function SolsRadarModal({ modalProps, initialTab = "recentJoins" }: SolsR
 
     return (
         <ModalRoot {...modalProps} size={ModalSize.MEDIUM}>
-            <ModalContent>
-                <ModalCloseButton onClick={modalProps.onClose} />
-
+            <ModalHeader>
+                <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    width: "100%",
+                }}>
+                    <Heading tag="h2">Sol Radar</Heading>
+                    <ModalCloseButton onClick={modalProps.onClose} />
+                </div>
+            </ModalHeader>
+            {/* Tab bar */}
+            <div style={styles.tabBar}>
+                {TABS.map(tab => (
+                    <button
+                        key={tab.id}
+                        style={styles.tabBtn(activeTab === tab.id)}
+                        onClick={() => setActiveTab(tab.id)}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+            <ModalContent separator>
                 <div style={styles.root}>
-                    {/* Tab bar */}
-                    <div style={styles.tabBar}>
-                        {TABS.map(tab => (
-                            <button
-                                key={tab.id}
-                                style={styles.tabBtn(activeTab === tab.id)}
-                                onClick={() => setActiveTab(tab.id)}
-                            >
-                                {tab.label}
-                            </button>
-                        ))}
-                    </div>
 
                     {/* Conteúdo da tab ativa */}
                     <div style={styles.content}>

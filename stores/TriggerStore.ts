@@ -8,11 +8,11 @@ import { DataStore } from "@api/index";
 import { Logger } from "@utils/Logger";
 import { React } from "@webpack/common";
 
-const logger = new Logger("SolRadar.TriggerStore");
+const logger = new Logger("SolRadar");
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-export type TriggerType = "BIOME" | "RARE_BIOME" | "WEATHER" | "MERCHANT" | "CUSTOM";
+export type TriggerType = "RARE_BIOME" | "EVENT_BIOME" | "BIOME" | "WEATHER" | "MERCHANT" | "CUSTOM";
 
 export interface TriggerState {
     enabled: boolean;
@@ -20,6 +20,15 @@ export interface TriggerState {
     notify: boolean;
     joinlock: boolean;
     joinlock_duration: number; // seconds
+    /**
+     * Prioridade do trigger (1 = mais alta, números maiores = menos importante).
+     * O join lock bloqueia novos joins, EXCETO de triggers com prioridade
+     * MENOR que o trigger que ativou o lock.
+     *
+     * Exemplo: lock ativado por prioridade 3 → triggers 1 e 2 ainda passam,
+     * triggers 4+ são bloqueados.
+     */
+    priority: number;
 }
 
 export interface KeywordSet {
@@ -49,7 +58,7 @@ export interface Trigger {
     icon_url: string;
     state: TriggerState;
     conditions: TriggerConditions;
-    biome?: TriggerBiome; // only for BIOME / RARE_BIOME
+    biome?: TriggerBiome;
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -60,8 +69,9 @@ export const DEFAULT_TRIGGER_STATE: TriggerState = {
     enabled: true,
     autojoin: true,
     notify: true,
-    joinlock: true,
-    joinlock_duration: 720,
+    joinlock: false,
+    joinlock_duration: 0,
+    priority: 10,
 };
 
 export const DEFAULT_CONDITIONS: TriggerConditions = {
@@ -95,19 +105,54 @@ export function makeDefaultTrigger(type: TriggerType = "BIOME"): Omit<Trigger, "
         },
     };
 
-    if (type === "BIOME" || type === "RARE_BIOME" || type === "WEATHER" || type === "CUSTOM") {
-        base.biome = { ...DEFAULT_BIOME };
+    if (type !== "MERCHANT") {
+        base.biome = {
+            ...DEFAULT_BIOME,
+            detection_enabled: type !== "CUSTOM",
+        };
     }
 
     return base;
 }
 
-// ─── Store interno (em memória, sincronizado com DataStore) ───────────────────
+// ─── Migração suave ───────────────────────────────────────────────────────────
+// Chamada em cada trigger ao carregar do DataStore.
+// Campos novos recebem defaults se ausentes — dados antigos são preservados.
+
+function migrateTrigger(raw: any): Trigger {
+    return {
+        id: raw.id ?? crypto.randomUUID(),
+        type: raw.type ?? "CUSTOM",
+        name: raw.name ?? "",
+        description: raw.description ?? "",
+        icon_url: raw.icon_url ?? "",
+        biome: raw.biome,
+        conditions: {
+            keywords: {
+                match: raw.conditions?.keywords?.match ?? { strict: false, value: [] },
+                exclude: raw.conditions?.keywords?.exclude ?? { strict: false, value: [] },
+            },
+            fromUser: raw.conditions?.fromUser ?? [],
+            inChannel: raw.conditions?.inChannel ?? [],
+        },
+        state: {
+            enabled: raw.state?.enabled ?? DEFAULT_TRIGGER_STATE.enabled,
+            autojoin: raw.state?.autojoin ?? DEFAULT_TRIGGER_STATE.autojoin,
+            notify: raw.state?.notify ?? DEFAULT_TRIGGER_STATE.notify,
+            joinlock: raw.state?.joinlock ?? DEFAULT_TRIGGER_STATE.joinlock,
+            joinlock_duration: raw.state?.joinlock_duration ?? DEFAULT_TRIGGER_STATE.joinlock_duration,
+            // campo novo — preserva se já existia, senão usa default
+            priority: raw.state?.priority ?? DEFAULT_TRIGGER_STATE.priority,
+        },
+    };
+}
+
+// ─── Store interno ────────────────────────────────────────────────────────────
 
 let _triggers: Trigger[] = [];
 const _listeners = new Set<() => void>();
 
-function notify() {
+function notifyListeners() {
     _listeners.forEach(fn => fn());
 }
 
@@ -120,11 +165,20 @@ export async function initTriggerStore(): Promise<void> {
     if (_initialized) return;
     _initialized = true;
 
-    const stored = await DataStore.get<Trigger[]>(DATASTORE_KEY);
+    const stored = await DataStore.get<any[]>(DATASTORE_KEY);
     logger.debug("Stored triggers:", stored);
-    _triggers = stored ?? [];
-    logger.info(`Loaded ${_triggers.length} triggers from DataStore.`);
-    notify();
+
+    if (stored && Array.isArray(stored)) {
+        _triggers = stored.map(migrateTrigger);
+        logger.info(`Loaded and migrated ${_triggers.length} triggers.`);
+        // Persiste versão migrada imediatamente
+        await DataStore.set(DATASTORE_KEY, _triggers);
+    } else {
+        _triggers = [];
+        logger.info("No stored triggers found, starting empty.");
+    }
+
+    notifyListeners();
 }
 
 // ─── Leitura ──────────────────────────────────────────────────────────────────
@@ -137,7 +191,6 @@ export function getTriggerById(id: string): Trigger | undefined {
     return _triggers.find(t => t.id === id);
 }
 
-/** Apenas triggers com enabled: true — usado no runtime */
 export function getActiveTriggers(): Trigger[] {
     return _triggers.filter(t => t.state.enabled);
 }
@@ -145,37 +198,41 @@ export function getActiveTriggers(): Trigger[] {
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 async function persist() {
-    logger.debug("Persisting triggers...");
     await DataStore.set(DATASTORE_KEY, _triggers);
-    logger.info(`Persisted ${_triggers.length} triggers to DataStore.`);
 }
 
 export async function addTrigger(data: Omit<Trigger, "id">): Promise<Trigger> {
     const trigger: Trigger = { id: crypto.randomUUID(), ...data };
     _triggers = [..._triggers, trigger];
-    notify();
+    notifyListeners();
     await persist();
     return trigger;
 }
 
 export async function updateTrigger(id: string, patch: Partial<Omit<Trigger, "id">>): Promise<void> {
     _triggers = _triggers.map(t => t.id === id ? { ...t, ...patch } : t);
-    notify();
+    notifyListeners();
     await persist();
 }
 
 export async function deleteTrigger(id: string): Promise<void> {
     _triggers = _triggers.filter(t => t.id !== id);
-    notify();
+    notifyListeners();
     await persist();
 }
 
-/** Toggle rápido de enabled — usado direto no card */
 export async function toggleTrigger(id: string): Promise<void> {
     _triggers = _triggers.map(t =>
         t.id === id ? { ...t, state: { ...t.state, enabled: !t.state.enabled } } : t
     );
-    notify();
+    notifyListeners();
+    await persist();
+}
+
+/** Salva nova ordem após drag & drop */
+export async function reorderTriggers(ordered: Trigger[]): Promise<void> {
+    _triggers = ordered;
+    notifyListeners();
     await persist();
 }
 
@@ -201,7 +258,6 @@ export type ImportResult =
 
 export async function importTriggersFromJson(json: string, mode: "merge" | "replace" = "merge"): Promise<ImportResult> {
     let parsed: unknown;
-
     try {
         parsed = JSON.parse(json);
     } catch {
@@ -212,7 +268,6 @@ export async function importTriggersFromJson(json: string, mode: "merge" | "repl
         return { ok: false, error: "Expected a JSON array of triggers." };
     }
 
-    // Validação mínima de shape
     const valid = (parsed as any[]).filter(t =>
         t && typeof t === "object" &&
         typeof t.name === "string" &&
@@ -224,19 +279,11 @@ export async function importTriggersFromJson(json: string, mode: "merge" | "repl
         return { ok: false, error: "No valid triggers found in the file." };
     }
 
-    // Garante IDs únicos nos importados
-    const incoming: Trigger[] = valid.map(t => ({
-        ...t,
-        id: crypto.randomUUID(),
-    }));
+    // Migra também os importados — garante que campos novos sejam preenchidos
+    const incoming: Trigger[] = valid.map(t => migrateTrigger({ ...t, id: crypto.randomUUID() }));
 
-    if (mode === "replace") {
-        _triggers = incoming;
-    } else {
-        _triggers = [..._triggers, ...incoming];
-    }
-
-    notify();
+    _triggers = mode === "replace" ? incoming : [..._triggers, ...incoming];
+    notifyListeners();
     await persist();
     return { ok: true, imported: incoming.length };
 }
@@ -247,9 +294,7 @@ export function useTriggers(): Trigger[] {
     const [triggers, setTriggers] = React.useState<Trigger[]>(_triggers);
 
     React.useEffect(() => {
-        // Sync caso o store já tenha sido populado antes do mount
         setTriggers(_triggers);
-
         const update = () => setTriggers([..._triggers]);
         _listeners.add(update);
         return () => { _listeners.delete(update); };

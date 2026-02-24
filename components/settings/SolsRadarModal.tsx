@@ -34,7 +34,8 @@ const styles = {
     root: {
         display: "flex",
         flexDirection: "column" as const,
-        minHeight: 420,
+        minHeight: 0,
+        height: "100%",
     },
     tabBar: {
         display: "flex",
@@ -58,7 +59,7 @@ const styles = {
     }),
     content: {
         flex: 1,
-        overflowY: "auto" as const,
+        minHeight: 0,
     },
 };
 

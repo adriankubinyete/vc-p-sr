@@ -5,6 +5,7 @@
  */
 
 import ErrorBoundary from "@components/ErrorBoundary";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { PropsWithChildren } from "react";
 
@@ -13,7 +14,7 @@ import { SolsRadarTitleBarButton } from "./components/buttons/SolsRadarTitleBarB
 import { SolsRadarIcon } from "./components/ui/SolsRadarIcon";
 import { settings } from "./settings";
 
-// const logger = new Logger("SOLRADAR::");
+const logger = new Logger("SolRadar");
 
 export default definePlugin({
     name: "SRadar",
@@ -48,4 +49,12 @@ export default definePlugin({
         icon: SolsRadarIcon,
         render: SolsRadarChatBarButton,
     },
+
+    async start() {
+        logger.info("Starting");
+    },
+
+    async stop() {
+        logger.info("Stopping");
+    }
 });

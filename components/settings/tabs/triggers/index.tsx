@@ -6,11 +6,14 @@
 
 import { Button } from "@components/Button";
 import { Paragraph } from "@components/Paragraph";
-import { React, showToast, Toasts, useRef } from "@webpack/common";
+import { Logger } from "@utils/Logger";
+import { React, showToast, Toasts, useEffect, useRef, useState } from "@webpack/common";
 
 import {
+    deleteTrigger,
     downloadTriggersJson,
     importTriggersFromJson,
+    reorderTriggers,
     toggleTrigger,
     Trigger,
     TriggerType,
@@ -18,112 +21,230 @@ import {
 } from "../../../../stores/TriggerStore";
 import { openAddTriggerModal, openEditTriggerModal } from "./TriggerModal";
 
+const logger = new Logger("SolRadar");
+
 // ─── Helpers visuais ──────────────────────────────────────────────────────────
 
 const TYPE_LABELS: Record<TriggerType, string> = {
-    BIOME: "Biome",
     RARE_BIOME: "Rare Biome",
+    EVENT_BIOME: "Event Biome",
+    BIOME: "Biome",
     WEATHER: "Weather",
     MERCHANT: "Merchant",
     CUSTOM: "Custom",
 };
 
 const TYPE_COLORS: Record<TriggerType, string> = {
-    BIOME: "var(--blue-345)",
-    RARE_BIOME: "var(--pink-400)",
-    WEATHER: "var(--green-360)",
+    RARE_BIOME: "var(--red-360)",
+    EVENT_BIOME: "var(--green-360)",
+    BIOME: "#ffb6c1",
+    WEATHER: "var(--blue-360)",
     MERCHANT: "var(--yellow-300)",
     CUSTOM: "var(--text-muted)",
 };
 
-// ─── Estilos — só layout de card e lista, sem equivalente nativo ──────────────
+// ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const s = {
     toolbar: {
+        flexShrink: 0,
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
+        marginTop: 8,
         marginBottom: 12,
         gap: 8,
     },
     toolbarRight: { display: "flex", gap: 6 },
-    list: { display: "flex", flexDirection: "column" as const, gap: 8 },
-    empty: { textAlign: "center" as const, marginTop: 40 },
-
+    wrapper: {
+        display: "flex",
+        flexDirection: "column" as const,
+        height: "100%",
+        minHeight: 0,
+    },
+    list: {
+        display: "flex",
+        flexDirection: "column" as const,
+        gap: 6,
+    },
+    empty: {
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "var(--text-muted)",
+        textAlign: "center" as const,
+        minHeight: 200,
+    },
+    container: {
+        flex: 1,
+        overflowY: "auto" as const,
+        minHeight: 0,
+        scrollbarWidth: "none" as const,
+    },
     card: (enabled: boolean): React.CSSProperties => ({
         display: "flex",
         alignItems: "center",
         gap: 12,
         padding: "10px 14px",
         borderRadius: 8,
-        background: enabled ? "rgba(67, 162, 90, 0.10)" : "var(--background-secondary)",
-        border: `1px solid ${enabled ? "rgba(67, 162, 90, 0.30)" : "var(--background-modifier-accent)"}`,
-        transition: "background 0.2s, border-color 0.2s",
+        background: enabled
+            ? "color-mix(in srgb, var(--green-360) 8%, var(--background-secondary))"
+            : "var(--background-mod-subtle)",
+        border: `1px solid ${enabled
+            ? "color-mix(in srgb, var(--green-360) 25%, transparent)"
+            : "var(--background-mod-normal)"}`,
     }),
-    cardIcon: {
-        width: 36, height: 36, borderRadius: 8,
-        flexShrink: 0, objectFit: "cover" as const,
+
+    // Coluna de botões de ordem (▲▼)
+    orderButtons: {
+        display: "flex",
+        flexDirection: "column" as const,
+        gap: 2,
+        flexShrink: 0,
     },
-    cardIconPlaceholder: (color: string): React.CSSProperties => ({
+    orderBtn: (disabled: boolean): React.CSSProperties => ({
+        background: "none",
+        border: "none",
+        padding: "1px 4px",
+        fontSize: 12,
+        lineHeight: 1,
+        cursor: disabled ? "default" : "pointer",
+        color: disabled ? "var(--text-muted)" : "var(--interactive-normal)",
+        opacity: disabled ? 0.3 : 1,
+        borderRadius: 3,
+        transition: "color 0.1s, opacity 0.1s",
+    }),
+
+    cardIcon: { width: 36, height: 36, borderRadius: 8, flexShrink: 0, objectFit: "cover" as const },
+    cardIconPlaceholder: (color: string, enabled: boolean): React.CSSProperties => ({
         width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-        background: color, color: "#fff",
+        background: enabled ? color : "var(--background-modifier-accent)",
+        color: enabled ? "#fff" : "var(--text-muted)",
         fontSize: 15, fontWeight: 700,
         display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "background 0.2s",
     }),
-    cardBody: {
-        flex: 1, display: "flex", flexDirection: "column" as const,
-        gap: 2, minWidth: 0,
-    },
-    cardName: {
-        color: "var(--text-normal)", fontWeight: 600, fontSize: 14,
+
+    cardBody: { flex: 1, display: "flex", flexDirection: "column" as const, gap: 3, minWidth: 0 },
+    cardName: (enabled: boolean): React.CSSProperties => ({
+        fontWeight: 600, fontSize: 14,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
-    },
-    cardType: (color: string): React.CSSProperties => ({
-        display: "inline-block",
-        padding: "1px 8px", borderRadius: 999,
-        background: `color-mix(in srgb, ${color} 15%, transparent)`,
-        color, fontSize: 11, fontWeight: 700, alignSelf: "flex-start",
+        color: enabled ? "var(--text-normal)" : "var(--text-muted)",
+        transition: "color 0.2s",
     }),
+    cardMeta: { display: "flex", alignItems: "center", gap: 6 },
+
+    typeBadge: (color: string, enabled: boolean): React.CSSProperties => ({
+        display: "inline-block",
+        padding: "1px 7px", borderRadius: 999,
+        background: enabled
+            ? `color-mix(in srgb, ${color} 15%, transparent)`
+            : "var(--background-modifier-accent)",
+        color: enabled ? color : "var(--text-muted)",
+        fontSize: 11, fontWeight: 700,
+        transition: "background 0.2s, color 0.2s",
+    }),
+
+    priorityBadge: (enabled: boolean): React.CSSProperties => ({
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        padding: "1px 7px", borderRadius: 999,
+        background: enabled
+            ? "color-mix(in srgb, var(--brand-500) 15%, transparent)"
+            : "var(--background-modifier-accent)",
+        color: enabled ? "var(--brand-360)" : "var(--text-muted)",
+        fontSize: 11, fontWeight: 700,
+        transition: "background 0.2s, color 0.2s",
+    }),
+
     cardActions: { display: "flex", gap: 6, alignItems: "center", flexShrink: 0 },
 };
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
-function TriggerCard({ trigger }: { trigger: Trigger; }) {
+function TriggerCard({
+    trigger,
+    isFirst,
+    isLast,
+    shiftHeld,
+    onMoveUp,
+    onMoveDown,
+}: {
+    trigger: Trigger;
+    isFirst: boolean;
+    isLast: boolean;
+    shiftHeld: boolean;
+    onMoveUp: () => void;
+    onMoveDown: () => void;
+}) {
     const color = TYPE_COLORS[trigger.type];
     const label = TYPE_LABELS[trigger.type];
     const initial = trigger.name.charAt(0).toUpperCase();
+    const { enabled } = trigger.state;
 
     return (
-        <div style={s.card(trigger.state.enabled)}>
+        <div style={s.card(enabled)}>
+
+            {/* Botões de ordem */}
+            <div style={s.orderButtons}>
+                <button
+                    style={s.orderBtn(isFirst)}
+                    disabled={isFirst}
+                    onClick={onMoveUp}
+                    title="Move up"
+                >
+                    ▲
+                </button>
+                <button
+                    style={s.orderBtn(isLast)}
+                    disabled={isLast}
+                    onClick={onMoveDown}
+                    title="Move down"
+                >
+                    ▼
+                </button>
+            </div>
+
+            {/* Ícone */}
             {trigger.icon_url
                 ? <img src={trigger.icon_url} alt="" style={s.cardIcon} />
-                : <div style={s.cardIconPlaceholder(color)}>{initial}</div>
+                : <div style={s.cardIconPlaceholder(color, enabled)}>{initial}</div>
             }
 
+            {/* Info */}
             <div style={s.cardBody}>
-                <span style={s.cardName}>{trigger.name}</span>
-                <span style={s.cardType(color)}>{label}</span>
+                <span style={s.cardName(enabled)}>{trigger.name}</span>
+                <div style={s.cardMeta}>
+                    <span style={s.typeBadge(color, enabled)}>{label}</span>
+                    <span style={s.priorityBadge(enabled)} title="Priority (lower = more important)">
+                        ★ {trigger.state.priority}
+                    </span>
+                </div>
             </div>
 
+            {/* Ações */}
             <div style={s.cardActions}>
-                {/* Toggle ON/OFF — positive quando ativo, secondary outline quando inativo */}
                 <Button
                     size="small"
-                    variant={trigger.state.enabled ? "positive" : "secondary"}
+                    variant={enabled ? "positive" : "secondary"}
                     onClick={() => toggleTrigger(trigger.id)}
                 >
-                    {trigger.state.enabled ? "ON" : "OFF"}
+                    {enabled ? "ON" : "OFF"}
                 </Button>
-
                 <Button
                     size="small"
-                    variant="secondary"
-                    onClick={() => openEditTriggerModal(trigger)}
+                    variant={shiftHeld ? "dangerPrimary" : "secondary"}
+                    onClick={() => shiftHeld
+                        ? deleteTrigger(trigger.id)
+                        : openEditTriggerModal(trigger)
+                    }
                 >
-                    Edit
+                    {shiftHeld ? "Delete" : "Edit"}
                 </Button>
             </div>
+
         </div>
     );
 }
@@ -133,6 +254,23 @@ function TriggerCard({ trigger }: { trigger: Trigger; }) {
 export function TriggersTab() {
     const triggers = useTriggers();
     const importRef = useRef<HTMLInputElement>(null);
+    const [shiftHeld, setShiftHeld] = useState(false);
+
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(true); };
+        const onKeyUp = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
+        // Reset se o usuario alt+tab ou perde foco com shift pressionado
+        const onBlur = () => setShiftHeld(false);
+
+        window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("keyup", onKeyUp);
+        window.addEventListener("blur", onBlur);
+        return () => {
+            window.removeEventListener("keydown", onKeyDown);
+            window.removeEventListener("keyup", onKeyUp);
+            window.removeEventListener("blur", onBlur);
+        };
+    }, []);
 
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -147,8 +285,44 @@ export function TriggersTab() {
         e.target.value = "";
     };
 
+    const move = (fromIndex: number, toIndex: number) => {
+        if (toIndex < 0 || toIndex >= triggers.length) return;
+        logger.info(`Moving trigger "${triggers[fromIndex].name}" from ${fromIndex} to ${toIndex}`);
+        const newOrder = [...triggers];
+        const [moved] = newOrder.splice(fromIndex, 1);
+        newOrder.splice(toIndex, 0, moved);
+        reorderTriggers(newOrder);
+    };
+
     return (
-        <div>
+        <div style={s.wrapper}>
+            <div style={s.container}>
+                {triggers.length === 0
+                    ? (
+                        <div style={s.empty}>
+                            <Paragraph size="sm">
+                                No triggers yet. Create a new trigger or import some from a file!
+                            </Paragraph>
+                        </div>
+                    )
+                    : (
+                        <div style={s.list}>
+                            {triggers.map((t, i) => (
+                                <TriggerCard
+                                    key={t.id}
+                                    trigger={t}
+                                    isFirst={i === 0}
+                                    isLast={i === triggers.length - 1}
+                                    shiftHeld={shiftHeld}
+                                    onMoveUp={() => move(i, i - 1)}
+                                    onMoveDown={() => move(i, i + 1)}
+                                />
+                            ))}
+                        </div>
+                    )
+                }
+            </div>
+
             <div style={s.toolbar}>
                 <Paragraph>{triggers.length} trigger{triggers.length !== 1 ? "s" : ""}</Paragraph>
 
@@ -160,12 +334,11 @@ export function TriggersTab() {
                         Import
                     </Button>
                     <Button size="small" variant="primary" onClick={openAddTriggerModal}>
-                        + Add Trigger
+                        + New Trigger
                     </Button>
                 </div>
             </div>
 
-            {/* Input de importação oculto */}
             <input
                 ref={importRef}
                 type="file"
@@ -173,22 +346,6 @@ export function TriggersTab() {
                 style={{ display: "none" }}
                 onChange={handleImport}
             />
-
-            {/* Lista */}
-            {triggers.length === 0
-                ? (
-                    <div style={s.empty}>
-                        <Paragraph>
-                            No triggers yet. Click "+ Add Trigger" or import a JSON file to get started.
-                        </Paragraph>
-                    </div>
-                )
-                : (
-                    <div style={s.list}>
-                        {triggers.map(t => <TriggerCard key={t.id} trigger={t} />)}
-                    </div>
-                )
-            }
         </div>
     );
 }

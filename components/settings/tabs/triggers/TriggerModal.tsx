@@ -36,14 +36,15 @@ const GuildStore = findByPropsLazy("getGuild", "getGuildCount");
 type InnerTab = "general" | "conditions" | "biome";
 
 const TRIGGER_TYPE_OPTIONS = [
-    { label: "Biome", value: "BIOME" },
     { label: "Rare Biome", value: "RARE_BIOME" },
+    { label: "Event Biome", value: "EVENT_BIOME" },
+    { label: "Biome", value: "BIOME" },
     { label: "Weather", value: "WEATHER" },
     { label: "Merchant", value: "MERCHANT" },
     { label: "Custom", value: "CUSTOM" },
 ];
 
-const needsBiomeTab = (type: TriggerType) => type === "BIOME" || type === "RARE_BIOME" || type === "WEATHER" || type === "CUSTOM";
+const needsBiomeTab = (type: TriggerType) => type === "RARE_BIOME" || type === "EVENT_BIOME" || type === "BIOME" || type === "WEATHER" || type === "CUSTOM";
 const arrToStr = (arr: string[]) => arr.join(", ");
 const strToArr = (str: string): string[] => str.split(",").map(s => s.trim()).filter(Boolean);
 
@@ -269,6 +270,8 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
 
     return (
         <>
+            <Heading style={{ marginBottom: 8 }} tag="h4">Details</Heading>
+
             <section>
                 <Heading tag="h5">Type</Heading>
                 <Select
@@ -283,8 +286,6 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
                     serialize={v => v}
                 />
             </section>
-
-            <Divider style={{ margin: "12px 0" }} />
 
             <section>
                 <Heading tag="h5">Name *</Heading>
@@ -302,12 +303,20 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
             </section>
 
             <Divider style={{ margin: "12px 0" }} />
-            <Heading tag="h5">Behavior</Heading>
+            <Heading style={{ marginBottom: 8 }} tag="h4">Behavior</Heading>
 
             <FormSwitch title="Enabled" value={state.enabled} onChange={v => patch({ state: { ...state, enabled: v } })} description="Whether this trigger is active." />
             <FormSwitch title="Auto-join" value={state.autojoin} onChange={v => patch({ state: { ...state, autojoin: v } })} description="Automatically join the match when triggered." />
             <FormSwitch title="Notify" value={state.notify} onChange={v => patch({ state: { ...state, notify: v } })} description="Show a notification when matched." />
-            <FormSwitch title="Join lock" value={state.joinlock} onChange={v => patch({ state: { ...state, joinlock: v } })} description="Should prevent other triggers from happening while this one is active?" />
+            <section style={{ marginTop: 8 }}>
+                <Heading tag="h5">Priority</Heading>
+                <Paragraph style={{ marginBottom: 4 }}>
+                    A low number means more important. Defaults to 10.
+                </Paragraph>
+                <TextInput value={String(state.priority)} placeholder="e.g. 10" onChange={v => patch({ state: { ...state, priority: Number(v) } })} />
+            </section>
+            <Divider style={{ margin: "12px 0" }} />
+            <FormSwitch title="Join lock" value={state.joinlock} onChange={v => patch({ state: { ...state, joinlock: v } })} description="Should prevent other triggers from happening while this one is active? Triggers with a higher priority will bypass join locks." />
 
             {state.joinlock && (
                 <section style={{ marginTop: 8 }}>
@@ -319,7 +328,7 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
                     />
                 </section>
             )}
-        </>
+    </>
     );
 }
 

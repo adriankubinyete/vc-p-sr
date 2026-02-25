@@ -50,6 +50,7 @@ export interface TriggerConditions {
 export interface TriggerBiome {
     detection_enabled: boolean;
     detection_keyword: string;
+    skip_redundant_join: boolean;
 }
 
 export interface Trigger {
@@ -90,6 +91,7 @@ export const DEFAULT_CONDITIONS: TriggerConditions = {
 export const DEFAULT_BIOME: TriggerBiome = {
     detection_enabled: true,
     detection_keyword: "",
+    skip_redundant_join: true,
 };
 
 export function makeDefaultTrigger(type: TriggerType = "BIOME"): Omit<Trigger, "id"> {
@@ -132,7 +134,11 @@ function migrateTrigger(raw: any): Trigger {
         name: raw.name ?? "",
         description: raw.description ?? "",
         icon_url: raw.icon_url ?? "",
-        biome: raw.biome,
+        biome: {
+            detection_enabled: raw.biome?.detection_enabled ?? DEFAULT_BIOME.detection_enabled,
+            detection_keyword: raw.biome?.detection_keyword ?? DEFAULT_BIOME.detection_keyword,
+            skip_redundant_join: raw.biome?.skip_redundant_join ?? DEFAULT_BIOME.skip_redundant_join,
+        },
         conditions: {
             keywords: {
                 match: raw.conditions?.keywords?.match ?? { strict: false, value: [] },
@@ -149,7 +155,6 @@ function migrateTrigger(raw: any): Trigger {
             notify: raw.state?.notify ?? DEFAULT_TRIGGER_STATE.notify,
             joinlock: raw.state?.joinlock ?? DEFAULT_TRIGGER_STATE.joinlock,
             joinlock_duration: raw.state?.joinlock_duration ?? DEFAULT_TRIGGER_STATE.joinlock_duration,
-            // campo novo — preserva se já existia, senão usa default
             priority: raw.state?.priority ?? DEFAULT_TRIGGER_STATE.priority,
         },
     };

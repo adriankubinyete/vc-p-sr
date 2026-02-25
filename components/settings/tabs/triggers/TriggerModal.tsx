@@ -287,7 +287,7 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
                 />
             </section>
 
-            <section>
+            <section style={{ marginTop: 8 }}>
                 <Heading tag="h5">Name *</Heading>
                 <TextInput value={name} placeholder="e.g. Glitch" onChange={v => patch({ name: v })} />
             </section>
@@ -432,17 +432,26 @@ function BiomeTab({ biome, onChange }: { biome: TriggerBiome; onChange: (b: Trig
             />
 
             {biome.detection_enabled && (
-                <section style={{ marginTop: 8 }}>
-                    <Heading tag="h5">RPC Keyword</Heading>
-                    <TextInput
-                        value={biome.detection_keyword}
-                        placeholder="e.g. GLITCHED"
-                        onChange={v => onChange({ ...biome, detection_keyword: v })}
+                <>
+                    <section style={{ marginTop: 8 }}>
+                        <Heading tag="h5">RPC Keyword</Heading>
+                        <TextInput
+                            value={biome.detection_keyword}
+                            placeholder="e.g. GLITCHED"
+                            onChange={v => onChange({ ...biome, detection_keyword: v })}
+                        />
+                        <Paragraph style={{ marginTop: 4 }}>
+                            Keyword used to detect a biome from Roblox's client debug log. Should match the BloxstrapRPC "hoverText" field. If empty, biome detection will be disabled.
+                        </Paragraph>
+                    </section>
+                    <Divider style={{ margin: "8px 0" }} />
+                    <FormSwitch
+                        title="Skip Redundant Join"
+                        value={biome.skip_redundant_join}
+                        onChange={v => onChange({ ...biome, skip_redundant_join: v })}
+                        description="If enabled, check if the player is already in the detected biome before joining. If they are, skip the join (will still try to notify)."
                     />
-                    <Paragraph style={{ marginTop: 4 }}>
-                        Keyword used to detect a biome from Roblox's client debug log. Should match the BloxstrapRPC "hoverText" field. If empty, biome detection will be disabled.
-                    </Paragraph>
-                </section>
+                </>
             )}
         </>
     );

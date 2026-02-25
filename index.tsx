@@ -124,6 +124,13 @@ export default definePlugin({
 
             logger.info(`✅ MATCH! -> "${trigger.name}" (priority ${trigger.state.priority})`);
 
+            // TODO:
+            // - are we monitoring that channel? OR does the user has the bypass channel restriction?
+
+            // - join the link
+            // - if join happened, lock and notify etc........
+            // prioritize join speed: join first
+
             // TODO: join lock, biome detection, autojoin, notify
 
 

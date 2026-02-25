@@ -33,7 +33,7 @@ const GuildStore = findByPropsLazy("getGuild", "getGuildCount");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type InnerTab = "general" | "conditions" | "biome";
+type InnerTab = "general" | "conditions" | "biome" | "advanced";
 
 const TRIGGER_TYPE_OPTIONS = [
     { label: "Rare Biome", value: "RARE_BIOME" },
@@ -335,7 +335,7 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
 // ─── Tab: Conditions ──────────────────────────────────────────────────────────
 
 function ConditionsTab({ conditions, onChange }: { conditions: TriggerConditions; onChange: (c: TriggerConditions) => void; }) {
-    const { keywords, fromUser, inChannel, bypassChannelRestriction, bypassMatchAmbiguity } = conditions;
+    const { keywords, fromUser, inChannel } = conditions;
 
     const patchMatch = (p: Partial<typeof keywords.match>) => onChange({ ...conditions, keywords: { ...keywords, match: { ...keywords.match, ...p } } });
     const patchExclude = (p: Partial<typeof keywords.exclude>) => onChange({ ...conditions, keywords: { ...keywords, exclude: { ...keywords.exclude, ...p } } });
@@ -408,22 +408,6 @@ function ConditionsTab({ conditions, onChange }: { conditions: TriggerConditions
                 ids={inChannel}
                 onChange={ids => onChange({ ...conditions, inChannel: ids })}
             />
-
-            <Divider style={{ margin: "12px 0" }} />
-
-            <FormSwitch
-                title="Bypass channel restriction"
-                value={bypassChannelRestriction}
-                onChange={v => onChange({ ...conditions, bypassChannelRestriction: v })}
-                description="Ignore the main monitored channel setting, that restricts triggers to certain channels. Useful for important triggers you want to work everywhere. If you don't know what this does, you probably don't need it."
-            />
-
-            <FormSwitch
-                title="Bypass match ambiguity"
-                value={bypassMatchAmbiguity}
-                onChange={v => onChange({ ...conditions, bypassMatchAmbiguity: v })}
-                description="Ignores the ambiguity system and treats this trigger as always unambiguous. Useful for very specific triggers that would otherwise be blocked by the ambiguity system. If you don't understand what the match ambiguity system is, you probably don't need this."
-            />
         </>
     );
 }
@@ -464,6 +448,33 @@ function BiomeTab({ biome, onChange }: { biome: TriggerBiome; onChange: (b: Trig
     );
 }
 
+// ─── Tab: Advanced ──────────────────────────────────────────────────────────
+
+function AdvancedTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: Partial<Omit<Trigger, "id">>) => void; }) {
+    const { conditions } = draft;
+    const { bypassChannelRestriction, bypassMatchAmbiguity } = conditions;
+
+    return (
+        <>
+            <Heading style={{ marginBottom: 8 }} tag="h4">Bypasses - Conditions</Heading>
+
+            <FormSwitch
+                title="Bypass channel restriction"
+                value={bypassChannelRestriction}
+                onChange={v => patch({ conditions: { ...conditions, bypassChannelRestriction: v } })}
+                description="Ignore the main monitored channel setting, that restricts triggers to certain channels. Useful for important triggers you want to work everywhere. If you don't know what this does, you probably don't need it."
+            />
+
+            <FormSwitch
+                title="Bypass match ambiguity"
+                value={bypassMatchAmbiguity}
+                onChange={v => patch({ conditions: { ...conditions, bypassMatchAmbiguity: v } })}
+                description="Ignores the ambiguity system and treats this trigger as always unambiguous. Useful for very specific triggers that would otherwise be blocked by the ambiguity system. If you don't understand what the match ambiguity system is, you probably don't need this."
+            />
+    </>
+    );
+}
+
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
 
 const tabBarStyles = {
@@ -498,7 +509,7 @@ function TriggerModal({ modalProps, trigger }: TriggerModalProps) {
     const isEditing = trigger !== undefined;
     const [innerTab, setInnerTab] = useState<InnerTab>("general");
     const [draft, setDraft] = useState<Omit<Trigger, "id">>(
-        trigger ? (({ id, ...rest }) => rest)(trigger) : makeDefaultTrigger("CUSTOM")
+        trigger ? (({ id, ...rest }) => rest)(trigger) : makeDefaultTrigger("BIOME")
     );
 
     const patch = (p: Partial<Omit<Trigger, "id">>) => setDraft(prev => ({ ...prev, ...p }));
@@ -509,6 +520,7 @@ function TriggerModal({ modalProps, trigger }: TriggerModalProps) {
         { id: "general", label: "General" },
         { id: "conditions", label: "Conditions" },
         ...(showBiome ? [{ id: "biome" as InnerTab, label: "Biome" }] : []),
+        { id: "advanced", label: "Advanced" },
     ];
     if (innerTab === "biome" && !showBiome) setInnerTab("general");
 
@@ -555,6 +567,7 @@ function TriggerModal({ modalProps, trigger }: TriggerModalProps) {
                 {innerTab === "general" && <GeneralTab draft={draft} patch={patch} />}
                 {innerTab === "conditions" && <ConditionsTab conditions={draft.conditions} onChange={c => patch({ conditions: c })} />}
                 {innerTab === "biome" && draft.biome && <BiomeTab biome={draft.biome} onChange={b => patch({ biome: b })} />}
+                {innerTab === "advanced" && <AdvancedTab draft={draft} patch={patch} />}
             </ModalContent>
 
             {/* Nunca scrolla */}

@@ -42,5 +42,11 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Whether to merge embeds into the message content when checking for triggers. If you're monitoring a Macro server, you might want to enable this.",
         default: true
+    },
+    hideInactiveIndicator: {
+        type: OptionType.BOOLEAN,
+        description: "Whether to hide the red 'inactive' dot when shortcut action is disabled.",
+        default: true,
+        hidden: true
     }
 });

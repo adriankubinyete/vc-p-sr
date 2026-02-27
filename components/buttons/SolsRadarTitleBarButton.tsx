@@ -23,10 +23,11 @@ interface SolsRadarTitleBarButtonProps {
 }
 
 export function SolsRadarTitleBarButton({ className = "" }: SolsRadarTitleBarButtonProps) {
-    const { autoJoinEnabled, notificationEnabled, pluginIconShortcutAction } = settings.use([
+    const { autoJoinEnabled, notificationEnabled, pluginIconShortcutAction, hideInactiveIndicator } = settings.use([
         "autoJoinEnabled",
         "notificationEnabled",
         "pluginIconShortcutAction",
+        "hideInactiveIndicator",
     ]);
 
     const isActive = autoJoinEnabled;
@@ -86,7 +87,7 @@ export function SolsRadarTitleBarButton({ className = "" }: SolsRadarTitleBarBut
                     <SolsRadarIcon height={20} width={20} />
 
                     {/* indicator */}
-                    <div
+                    {(isActive || !hideInactiveIndicator) && (<div
                         style={{
                             position: "absolute",
                             right: 4,
@@ -99,7 +100,7 @@ export function SolsRadarTitleBarButton({ className = "" }: SolsRadarTitleBarBut
                             boxShadow: "0 0 3px rgba(0,0,0,0.3)",
                             transform: "scale(0.7)",
                         }}
-                    />
+                    />)}
                 </div>
             )}
             selected={isActive}

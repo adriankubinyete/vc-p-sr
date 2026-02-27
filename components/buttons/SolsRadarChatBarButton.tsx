@@ -5,7 +5,7 @@
  */
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
-import { React,showToast, Toasts } from "@webpack/common";
+import { React, showToast, Toasts } from "@webpack/common";
 
 import { settings } from "../../settings";
 import { openSolsRadarModal } from "../settings/SolsRadarModal";
@@ -18,10 +18,11 @@ const STATE_COLORS = {
 
 export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => {
     // Lê estados reativamente → causa re-render quando mudam
-    const { autoJoinEnabled, notificationEnabled, pluginIconShortcutAction } = settings.use([
+    const { autoJoinEnabled, notificationEnabled, pluginIconShortcutAction, hideInactiveIndicator } = settings.use([
         "autoJoinEnabled",
         "notificationEnabled",
         "pluginIconShortcutAction",
+        "hideInactiveIndicator",
     ]);
 
     if (!isMainChat || settings.store.pluginIconLocation !== "chatbar") return null;
@@ -85,20 +86,22 @@ export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => 
                 <SolsRadarIcon />
 
                 {/* indicator */}
-                <div
-                    style={{
-                        position: "absolute",
-                        right: -6,
-                        bottom: -6,
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        backgroundColor: isActive ? STATE_COLORS.ACTIVE : STATE_COLORS.INACTIVE,
-                        border: "1.5px solid var(--background-primary)",
-                        boxShadow: "0 0 3px rgba(0,0,0,0.3)",
-                        transform: "scale(0.7)",
-                    }}
-                />
+                {(isActive || !hideInactiveIndicator) && (
+                    <div
+                        style={{
+                            position: "absolute",
+                            right: -6,
+                            bottom: -6,
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            backgroundColor: isActive ? STATE_COLORS.ACTIVE : STATE_COLORS.INACTIVE,
+                            border: "1.5px solid var(--background-primary)",
+                            boxShadow: "0 0 3px rgba(0,0,0,0.3)",
+                            transform: "scale(0.7)",
+                        }}
+                    />
+                )}
             </div>
         </ChatBarButton>
     );

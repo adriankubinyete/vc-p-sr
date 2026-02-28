@@ -98,7 +98,7 @@ function isMessageAllowed({ channel, trigger }: { channel: Channel; trigger: Tri
     }
 
     const whitelist = parseCsv(settings.store.monitoredChannels);
-    if (whitelist.size > 0 && !whitelist.has(channel.id)) {
+    if (!whitelist.has(channel.id)) {
         log.debug(`[${trigger.name}] Channel #${channel.name} is not monitored — skipping.`);
         return false;
     }
@@ -184,24 +184,23 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild): 
     const link = extractLink(message);
     if (!link) return;
 
-    sanitizeContent(message); // remove links antes do matching
+    sanitizeContent(message); // remove links before matching so it doesnt affect keyword matching
 
     const trigger = resolveTrigger({ message, channel, guild }, log);
     if (!trigger) return;
 
     log.info(`Match: "${trigger.name}" (p${trigger.state.priority}) — #${channel.name} @ ${guild.name}`);
 
-    if (!isMessageAllowed({ channel, trigger }, log)) return;
+    if (!isMessageAllowed({ channel, trigger }, log)) return; // channel and guild restrictions
 
     const joined = await tryJoin(link, trigger, log);
-
-    // Notify acontece mesmo sem join (autojoin desativado = só notifica)
-    tryNotify(trigger, channel, guild, log);
+    tryNotify(trigger, channel, guild, log); // independent of join
 
     if (!joined) return;
 
-    activateJoinLock(trigger, log);
-    await runBiomeDetection(trigger, log);
+    // post-join stuff not implemented yet
+    // activateJoinLock(trigger, log);
+    // await runBiomeDetection(trigger, log);
 }
 
 // ─── plugin ───────────────────────────────────────────────────────────────────

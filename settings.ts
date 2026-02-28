@@ -48,5 +48,16 @@ export const settings = definePluginSettings({
         description: "Whether to hide the red 'inactive' dot when shortcut action is disabled.",
         default: true,
         hidden: true
-    }
+    },
+    monitoredChannels: {
+        type: OptionType.STRING,
+        description: "Comma-separated list of channel IDs that the plugin should monitor. If empty, no channel will be monitored. Example: `123456789012345678, 987654321098765432`",
+        default: "",
+    },
+    NEVER_MONITOR_THESE_GUILDS: {
+        type: OptionType.STRING,
+        description: "Comma-separated list of guild IDs that the plugin should ignore. Useful if you want to use the plugin but avoid monitoring a specific guild. Created because of Glitch Hunting servers with a no-snipers policy. Example: `123456789012345678, 987654321098765432`",
+        default: "",
+        hidden: true
+    },
 });

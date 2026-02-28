@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { showNotification } from "@api/Notifications";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Logger } from "@utils/Logger";
 import definePlugin, { PluginNative } from "@utils/types";
@@ -33,6 +34,9 @@ function parseCsv(csv: string | undefined): Set<string> {
 
 // ─── pre processing ────────────────────────────────────────────────────────
 
+/**
+ * Compacts embeds into the message content.
+ */
 function flattenEmbeds(message: Message): void {
     if (!settings.store.flattenEmbeds || !message.embeds.length) return;
     let flattened = message.content;
@@ -52,9 +56,7 @@ function extractLink(message: Message): RobloxLink | null {
 }
 
 /**
- * Remove os links Roblox do conteúdo da mensagem antes do matching.
- * Evita que slugs como "Sols-RNG-Cyberspace" disparem o trigger "cyber".
- * Deve ser chamado APÓS extractLink (que precisa do link intacto).
+ * Mainly intended to clear the links off the message content.
  */
 function sanitizeContent(message: Message): void {
     message.content = stripRobloxLinks(message.content);
@@ -81,7 +83,6 @@ function resolveTrigger({ message, channel, guild }: { message: Message; channel
 
 /**
  * Decides if a channel is allowed to be scanned.
- *
  */
 function isMessageAllowed({ channel, trigger }: { channel: Channel; trigger: Trigger; }, log: Logger): boolean {
 
@@ -130,7 +131,6 @@ export interface JoinResult {
  * Resolves a Roblox link and checks if it's safe to join based on allowed place ids.
  * can be skipped based on trigger conditions.
  * will be ignored if theres not a roblox token to resolve links with.
- *
  */
 async function verifyLink(link: RobloxLink, trigger: Trigger, log: Logger): Promise<boolean | undefined> {
     if (trigger.conditions.bypassLinkVerification) return undefined;
@@ -246,7 +246,8 @@ async function runBiomeDetection(trigger: Trigger, log: Logger): Promise<void> {
     log.debug(`[${trigger.name}] Biome detection pending.`);
 }
 
-function tryNotify(trigger: Trigger, channel: Channel, guild: Guild, log: Logger): void {
+// Note: notifications are not necessarily bound to "post-join"...
+function tryNotify({ trigger, channel, guild, joined }: { trigger: Trigger; channel: Channel; guild: Guild; joined: boolean; }, log: Logger): void {
     if (!settings.store.notificationEnabled) {
         log.debug(`[${trigger.name}] Notifications globally disabled.`);
         return;
@@ -255,6 +256,13 @@ function tryNotify(trigger: Trigger, channel: Channel, guild: Guild, log: Logger
         log.debug(`[${trigger.name}] Notifications disabled on this trigger.`);
         return;
     }
+
+    showNotification({
+        title: (joined) ? `🎯 SoRa >> Joined "${trigger.name}"!` : `✅ SoRa >> Matched "${trigger.name}"!`,
+        body: `In: "${channel.name}" ("${guild.name}")`,
+        icon: trigger.iconUrl
+    });
+
     // TODO: mostrar toast / notificação do sistema
     log.info(`[${trigger.name}] Notify: matched in #${channel.name} @ ${guild.name}.`);
 }
@@ -280,7 +288,7 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
 
     const { joined, metrics } = await tryJoin(link, trigger, log, tMessageReceived);
 
-    tryNotify(trigger, channel, guild, log);
+    tryNotify({ trigger, channel, guild, joined }, log);
 
     if (!joined) return;
 

@@ -80,7 +80,9 @@ const s = {
         flex: 1,
         overflowY: "auto" as const,
         minHeight: 0,
-        scrollbarWidth: "none" as const,
+        scrollbarColor: "var(--text-muted) transparent",
+        scrollbarWidth: "thin" as const,
+        scrollMarginLeft: 8,
     },
     card: (enabled: boolean): React.CSSProperties => ({
         display: "flex",

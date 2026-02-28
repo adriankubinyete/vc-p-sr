@@ -10,7 +10,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { PluginNative } from "@utils/types";
 import { Channel, Guild, Message } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
-import { ChannelStore, GuildStore } from "@webpack/common";
+import { ChannelStore, GuildStore, UserStore } from "@webpack/common";
 import { PropsWithChildren } from "react";
 
 import { SolsRadarChatBarButton } from "./components/buttons/SolsRadarChatBarButton";
@@ -19,6 +19,7 @@ import { SolsRadarIcon } from "./components/ui/SolsRadarIcon";
 import { buildJoinUri, closeGameIfNeeded, extractServerLink, getPlaceId, joinSolsPublicServer, RobloxLink, stripRobloxLinks } from "./services/RobloxService";
 import { getMatchingTrigger } from "./services/TriggerMatcher";
 import { settings } from "./settings";
+import { JoinMetrics, JoinStore } from "./stores/JoinStore";
 import { getActiveTriggers, Trigger } from "./stores/TriggerStore";
 
 const logger = new Logger("SolRadar");
@@ -34,9 +35,6 @@ function parseCsv(csv: string | undefined): Set<string> {
 
 // ─── pre processing ────────────────────────────────────────────────────────
 
-/**
- * Compacts embeds into the message content.
- */
 function flattenEmbeds(message: Message): void {
     if (!settings.store.flattenEmbeds || !message.embeds.length) return;
     let flattened = message.content;
@@ -55,9 +53,6 @@ function extractLink(message: Message): RobloxLink | null {
     return result.ok ? result.result! : null;
 }
 
-/**
- * Mainly intended to clear the links off the message content.
- */
 function sanitizeContent(message: Message): void {
     message.content = stripRobloxLinks(message.content);
 }
@@ -81,12 +76,7 @@ function resolveTrigger({ message, channel, guild }: { message: Message; channel
 
 // ─── channel validation ───────────────────────────────────────────────────────
 
-/**
- * Decides if a channel is allowed to be scanned.
- */
 function isMessageAllowed({ channel, trigger }: { channel: Channel; trigger: Trigger; }, log: Logger): boolean {
-
-    // glitch hunting servers with "dont use snipers" policy
     const blacklist = parseCsv(settings.store.NEVER_MONITOR_THESE_GUILDS);
     if (blacklist.has(channel.guild_id)) {
         log.debug(`[${trigger.name}] Guild ${channel.guild_id} is blacklisted — skipping.`);
@@ -109,21 +99,9 @@ function isMessageAllowed({ channel, trigger }: { channel: Channel; trigger: Tri
 
 // ─── join ─────────────────────────────────────────────────────────────────────
 
-/** Métricas de performance do join, em ms. */
-export interface JoinMetrics {
-    /** Tempo desde o recebimento da mensagem até o openUri ser chamado. */
-    timeToJoinMs: number;
-    /** Tempo que o openUri levou para retornar. */
-    joinDurationMs: number;
-    /** timeToJoinMs - joinDurationMs: quanto tempo "perdemos" antes de chamar o join. */
-    overheadMs: number;
-}
-
-/** Resultado de uma tentativa de join. */
 export interface JoinResult {
     joined: boolean;
     metrics: JoinMetrics | null;
-    /** undefined = verificação desativada, true = seguro, false = bait */
     linkSafe: boolean | undefined;
 }
 
@@ -135,36 +113,29 @@ async function executeBadLinkAction(): Promise<void> {
     }
 }
 
-/**
- * Resolves a Roblox link and checks if it's safe to join based on allowed place ids.
- * can be skipped based on trigger conditions.
- * will be ignored if theres not a roblox token to resolve links with.
- * true: link was checked, is allowed
- * false: link was checked, is not allowed
- */
 async function verifyLink(link: RobloxLink, trigger: Trigger, log: Logger): Promise<boolean | undefined> {
     if (trigger.conditions.bypassLinkVerification) {
         log.debug(`[${trigger.name}] Link verification bypassed.`);
         return undefined;
     }
+
     const mode = settings.store.linkVerification as "disabled" | "before" | "after" | undefined ?? "disabled";
-    const action = settings.store.onBadLink as "nothing" | "public" | "close" | undefined ?? "public";
     if (mode === "disabled") return undefined;
+
     if (!settings.store.robloxToken) {
-        log.warn("Link verification is enabled but robloxToken is missing. Please configure a valid token or disable link verification.");
+        log.warn("Link verification enabled but robloxToken is missing.");
         showNotification({
             title: "⚠️ SoRa :: Link verification warning",
             body: "Link verification is enabled but robloxToken is missing.\nPlease configure a valid token or disable link verification to stop getting this notification.\nClick on this message to disable link verification.",
-            onClick: () => settings.store.linkVerification = "disabled"
+            onClick: () => settings.store.linkVerification = "disabled",
         });
-        return false; // user wants link verification but he didnt set a token
+        return false;
     }
 
     log.debug(`[${trigger.name}] Verifying link ${JSON.stringify(link)}`);
-
     const placeId = await getPlaceId(link);
-
     const allowedPlaceIds = parseCsv(settings.store.allowedPlaceIds);
+
     if (allowedPlaceIds.size === 0 || allowedPlaceIds.has(String(placeId))) {
         log.debug(`[${trigger.name}] Place ID ${placeId} is allowed.`);
         return true;
@@ -176,10 +147,6 @@ async function verifyLink(link: RobloxLink, trigger: Trigger, log: Logger): Prom
     return false;
 }
 
-/**
- * Do the actual joining.
- * tMessageReceived should be the performance.now() captured at the start of MESSAGE_CREATE.
- */
 async function tryJoin(
     link: RobloxLink,
     trigger: Trigger,
@@ -197,7 +164,6 @@ async function tryJoin(
         return noJoin;
     }
 
-    // Verificação BEFORE: bloqueia se bait
     if ((settings.store.linkVerification as string) === "before") {
         const safe = await verifyLink(link, trigger, log);
         if (safe === false) {
@@ -233,9 +199,7 @@ async function tryJoin(
 
     let linkSafe: boolean | undefined = undefined;
     if ((settings.store.linkVerification as string) === "after") {
-        verifyLink(link, trigger, log).then(safe => {
-            linkSafe = safe;
-        });
+        verifyLink(link, trigger, log).then(safe => { linkSafe = safe; });
     }
 
     return { joined: true, metrics, linkSafe };
@@ -255,7 +219,6 @@ async function runBiomeDetection(trigger: Trigger, log: Logger): Promise<void> {
     log.debug(`[${trigger.name}] Biome detection pending.`);
 }
 
-// Note: notifications are not necessarily bound to "post-join"...
 function tryNotify({ trigger, channel, guild, joined }: { trigger: Trigger; channel: Channel; guild: Guild; joined: boolean; }, log: Logger): void {
     if (!settings.store.notificationEnabled) {
         log.debug(`[${trigger.name}] Notifications globally disabled.`);
@@ -267,12 +230,71 @@ function tryNotify({ trigger, channel, guild, joined }: { trigger: Trigger; chan
     }
 
     showNotification({
-        title: (joined) ? `🎯 SoRa >> Joined "${trigger.name}"!` : `✅ SoRa >> Matched "${trigger.name}"!`,
+        title: joined ? `🎯 SoRa >> Joined "${trigger.name}"!` : `✅ SoRa >> Matched "${trigger.name}"!`,
         body: `In: "${channel.name}" ("${guild.name}")`,
-        icon: trigger.iconUrl
+        icon: trigger.iconUrl,
     });
 
     log.info(`[${trigger.name}] Notify: matched in #${channel.name} @ ${guild.name}.`);
+}
+
+// ─── JoinStore integration ────────────────────────────────────────────────────
+
+/**
+ * Cria uma entrada no JoinStore assim que o match é confirmado,
+ * antes do join acontecer — para que o histórico capture até os casos
+ * onde autojoin está desativado.
+ * Retorna o joinId para que as tags possam ser adicionadas progressivamente.
+ */
+function createJoinRecord(
+    message: Message,
+    link: RobloxLink,
+    trigger: Trigger,
+    channel: Channel,
+    guild: Guild
+): number {
+    const author = UserStore.getUser(message.author.id);
+
+    return JoinStore.add({
+        triggerName: trigger.name,
+        triggerType: trigger.type,
+        triggerPriority: trigger.state.priority,
+        iconUrl: trigger.iconUrl,
+        authorName: message.author.username,
+        authorAvatarUrl: author?.getAvatarURL?.() ?? undefined,
+        authorId: message.author.id,
+        channelName: channel.name,
+        guildName: guild.name,
+        messageJumpUrl: `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}`,
+        originalContent: link.link, // o link original, antes do sanitize
+    });
+}
+
+/**
+ * Resolve as tags finais baseado no resultado do join e na verificação de link.
+ * Chamado após tryJoin retornar.
+ */
+function finalizeJoinRecord(
+    joinId: number,
+    result: JoinResult,
+    log: Logger
+): void {
+    if (!result.joined) {
+        JoinStore.addTags(joinId, result.linkSafe === false ? "link-verified-unsafe" : "failed");
+        return;
+    }
+
+    // join aconteceu — salva métricas e resolve tags de link
+    JoinStore.update(joinId, { metrics: result.metrics ?? undefined });
+
+    if (result.linkSafe === true) JoinStore.addTags(joinId, "link-verified-safe");
+    else if (result.linkSafe === false) JoinStore.addTags(joinId, "link-verified-unsafe");
+    else JoinStore.addTags(joinId, "link-not-verified");
+
+    // biome-not-verified por padrão — será sobrescrito pelo detector quando implementado
+    JoinStore.addTags(joinId, "biome-not-verified");
+
+    log.debug(`Join record ${joinId} finalized.`);
 }
 
 // ─── orchestration ─────────────────────────────────────────────────────────────
@@ -294,11 +316,17 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
 
     if (!isMessageAllowed({ channel, trigger }, log)) return;
 
-    const { joined, metrics } = await tryJoin(link, trigger, log, tMessageReceived);
+    // Cria a entrada no histórico imediatamente após o match ser validado
+    const joinId = createJoinRecord(message, link, trigger, channel, guild);
 
-    tryNotify({ trigger, channel, guild, joined }, log);
+    const result = await tryJoin(link, trigger, log, tMessageReceived);
 
-    if (!joined) return;
+    tryNotify({ trigger, channel, guild, joined: result.joined }, log);
+
+    // Resolve as tags finais da entrada
+    finalizeJoinRecord(joinId, result, log);
+
+    if (!result.joined) return;
 
     // activateJoinLock(trigger, log);
     // await runBiomeDetection(trigger, log);

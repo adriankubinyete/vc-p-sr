@@ -6,6 +6,7 @@
 
 import { Button } from "@components/Button";
 import { Paragraph } from "@components/Paragraph";
+import { closeAllModals } from "@utils/modal";
 import { NavigationRouter, React, showToast, TextInput, Toasts, useState } from "@webpack/common";
 
 import { JoinEntry, JoinStore, JoinTag, useJoinHistory } from "../../../../stores/JoinStore";
@@ -150,7 +151,10 @@ export function RecentJoinsTab() {
 
     const jumpToMessage = (entry: JoinEntry) => {
         if (!entry.messageJumpUrl) return;
-        try { NavigationRouter.transitionTo(new URL(entry.messageJumpUrl).pathname); }
+        try {
+            NavigationRouter.transitionTo(new URL(entry.messageJumpUrl).pathname);
+            closeAllModals();
+        }
         catch { showToast("Failed to navigate.", Toasts.Type.FAILURE); }
     };
 

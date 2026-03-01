@@ -8,7 +8,7 @@ import { Button } from "@components/Button";
 import { Divider } from "@components/Divider";
 import { Heading } from "@components/Heading";
 import { copyToClipboard } from "@utils/clipboard";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "@utils/modal";
+import { closeAllModals, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "@utils/modal";
 import { NavigationRouter, React, showToast, Toasts } from "@webpack/common";
 
 import { JoinEntry, JoinStore } from "../../../../stores/JoinStore";
@@ -27,17 +27,15 @@ export function DetailRow({ label, value }: { label: string; value: React.ReactN
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
-function JoinModal({ entry, modalProps, onCloseAll }: {
+function JoinModal({ entry, modalProps }: {
     entry: JoinEntry;
     modalProps: ModalProps;
-    onCloseAll?: () => void;
 }) {
     const jumpToMessage = () => {
         if (!entry.messageJumpUrl) return;
         try {
             NavigationRouter.transitionTo(new URL(entry.messageJumpUrl).pathname);
-            modalProps.onClose();
-            onCloseAll?.();
+            closeAllModals();
         } catch {
             showToast("Failed to navigate to message.", Toasts.Type.FAILURE);
         }
@@ -130,5 +128,5 @@ function JoinModal({ entry, modalProps, onCloseAll }: {
 // ─── Entrypoint ───────────────────────────────────────────────────────────────
 
 export function openJoinModal(entry: JoinEntry, onCloseAll?: () => void): void {
-    openModal(p => <JoinModal entry={entry} modalProps={p} onCloseAll={onCloseAll} />);
+    openModal(p => <JoinModal entry={entry} modalProps={p} />);
 }

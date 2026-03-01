@@ -118,7 +118,7 @@ function JoinCard({ entry, onClick, onContextMenu }: {
 // ─── RecentJoinsTab ───────────────────────────────────────────────────────────
 
 const FILTER_OPTIONS: { tagName: JoinTag | "all"; label: string; variant: PillVariant; }[] = [
-    { tagName: "all", label: "All", variant: "purple" },
+    { tagName: "all", label: "All", variant: "brand" },
     { tagName: "biome-verified-real", label: "Biome Real", variant: "green" },
     { tagName: "biome-verified-bait", label: "Biome Bait", variant: "red" },
     { tagName: "biome-verified-timeout", label: "Biome Timed Out", variant: "yellow" },
@@ -155,10 +155,10 @@ export function RecentJoinsTab() {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 8 }}>
 
             {/* Filters */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center", flexShrink: 0 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center", flexShrink: 0 }}>
                 <div style={{ width: "100%", flex: 1 }}>
                     <TextInput
                         value={search}
@@ -167,20 +167,6 @@ export function RecentJoinsTab() {
                     />
                 </div>
                 <div style={{ width: "100%", display: "flex", gap: 4 }}>
-                    {/* {FILTER_OPTIONS.map(opt => (
-                        <QuickFilterBtn
-                            size="xs"
-                            key={opt.value}
-                            onClick={() => setFilter(opt.value)}
-                            variant={filter === opt.value ? "primary" : "secondary"}
-                            style={{
-                                width: "100%",
-                                transition: "background 0.1s, color 0.1s",
-                            }}
-                        >
-                            {opt.label}
-                        </Button>
-                    ))} */}
                     {FILTER_OPTIONS.map(f => (
                         <QuickFilterBtn
                             key={f.tagName}

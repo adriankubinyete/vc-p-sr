@@ -357,13 +357,13 @@ function TriggerCard({
 
             {/* Footer — priority + estado */}
             <div style={s.cardFooter}>
-                <Pill border={PILL_BORDER_STYLE} radius={PILL_RADIUS_STYLE} variant={enabled ? variant : "muted"} size="xs" title="Type of trigger">{label}</Pill>
-                <Pill border={PILL_BORDER_STYLE} radius={PILL_RADIUS_STYLE} variant={enabled ? "brand" : "muted"} size="xs" title={`This trigger has a join priority of ${priority} (lower = more important)`}>
+                <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? variant : "muted"} size="xs" title="Type of trigger">{label}</Pill>
+                <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "brand" : "muted"} size="xs" title={`This trigger has a join priority of ${priority} (lower = more important)`}>
                     ★ {priority}
                 </Pill>
-                {autojoin && <Pill border={PILL_BORDER_STYLE} radius={PILL_RADIUS_STYLE} variant={enabled ? "green" : "muted"} size="xs" emoji="🎯" iconOnly title="This trigger will join the link once matched" />}
-                {notify && <Pill border={PILL_BORDER_STYLE} radius={PILL_RADIUS_STYLE} variant={enabled ? "blue" : "muted"} size="xs" emoji="🔔" iconOnly title="This trigger will notify you once matched" />}
-                {joinlock && <Pill border={PILL_BORDER_STYLE} radius={PILL_RADIUS_STYLE} variant={enabled ? "yellow" : "muted"} size="xs" emoji="🔒" iconOnly title={`This trigger will lock joins for ${joinlockDuration} seconds once matched`} />}
+                {autojoin && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "green" : "muted"} size="xs" emoji="🎯" iconOnly title="This trigger will join the link once matched" />}
+                {notify && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "blue" : "muted"} size="xs" emoji="🔔" iconOnly title="This trigger will notify you once matched" />}
+                {joinlock && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "yellow" : "muted"} size="xs" emoji="🔒" iconOnly title={`This trigger will lock joins for ${joinlockDuration} seconds once matched`} />}
                 {hasAnyBypass && (() => {
                     const bypasses: string[] = [];
                     if (bypassChannelRestriction) bypasses.push("Channel restriction bypass");
@@ -371,7 +371,7 @@ function TriggerCard({
                     if (bypassLinkVerification) bypasses.push("Link verification bypass");
                     return (
                         <Pill
-                            border={PILL_BORDER_STYLE} radius={PILL_RADIUS_STYLE} variant={enabled ? "red" : "muted"}
+                            border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "red" : "muted"}
                             size="xs"
                             emoji="✂️"
                             iconOnly

@@ -191,12 +191,20 @@ const s = {
         userSelect: "none",
         overflow: "hidden",
         transition: "filter 0.1s",
+        // new
+        // background: enabled
+        //     ? "color-mix(in srgb, var(--green-360) 6%, var(--background-secondary))"
+        //     : "var(--background-secondary)",
+        // border: `1px solid ${enabled
+        //     ? "color-mix(in srgb, var(--green-360) 25%, transparent)"
+        //     : "var(--background-mod-normal)"}`,
+        // old
         background: enabled
-            ? "color-mix(in srgb, var(--green-360) 6%, var(--background-secondary))"
-            : "var(--background-secondary)",
+            ? "rgba(59, 165, 92, 0.1)"
+            : "rgba(67, 67, 67, 0.1)",
         border: `1px solid ${enabled
-            ? "color-mix(in srgb, var(--green-360) 25%, transparent)"
-            : "var(--background-mod-normal)"}`,
+            ? "rgba(59, 165, 92, 0.3)"
+            : "rgba(255, 255, 255, 0.1)"}`,
     }),
     cardMain: {
         display: "flex",
@@ -296,6 +304,7 @@ function TriggerCard({
     const variant = TYPE_PILL_VARIANT[trigger.type];
     const label = TYPE_LABELS[trigger.type];
     const initial = trigger.name.charAt(0).toUpperCase();
+    const [hovered, setHovered] = useState(false);
     const { enabled, autojoin, notify, joinlock, joinlockDuration, priority } = trigger.state;
     const { bypassChannelRestriction, bypassMatchAmbiguity, bypassLinkVerification } = trigger.conditions;
     const hasAnyBypass = bypassChannelRestriction || bypassMatchAmbiguity || bypassLinkVerification;
@@ -307,9 +316,11 @@ function TriggerCard({
 
     return (
         <div
-            style={s.card(enabled)}
+            style={{ ...s.card(enabled), filter: hovered ? "brightness(1.1)" : "none" }}
             onClick={() => openEditTriggerModal(trigger)}
             onContextMenu={e => { e.preventDefault(); toggleTrigger(trigger.id); }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
             title={`${trigger.name} · Left click to edit · Right click to toggle trigger`}
         >
             {/* Main row */}

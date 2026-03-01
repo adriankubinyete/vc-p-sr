@@ -21,15 +21,27 @@ import {
 // ─── Card styling ─────────────────────────────────────────────────────────────
 
 function cardBorderColor(entry: JoinEntry): string {
-    if (entry.tags.some(t => DANGER_TAGS.has(t))) return "color-mix(in srgb, var(--red-400) 35%, transparent)";
-    if (entry.tags.includes("biome-verified-real")) return "color-mix(in srgb, var(--green-360) 35%, transparent)";
-    return "var(--background-mod-normal)";
+    // new
+    // if (entry.tags.some(t => DANGER_TAGS.has(t))) return "color-mix(in srgb, var(--red-400) 35%, transparent)";
+    // if (entry.tags.includes("biome-verified-real")) return "color-mix(in srgb, var(--green-360) 35%, transparent)";
+    // return "var(--background-mod-normal)";
+
+    // old
+    if (entry.tags.some(t => DANGER_TAGS.has(t))) return "rgba(237, 66, 69, 0.3)";
+    if (entry.tags.includes("biome-verified-real")) return "rgba(59, 165, 92, 0.3)";
+    return "rgba(255, 255, 255, 0.1)";
 }
 
 function cardBg(entry: JoinEntry): string {
-    if (entry.tags.some(t => DANGER_TAGS.has(t))) return "color-mix(in srgb, var(--red-400) 5%, var(--background-secondary))";
-    if (entry.tags.includes("biome-verified-real")) return "color-mix(in srgb, var(--green-360) 5%, var(--background-secondary))";
-    return "var(--background-secondary)";
+    // new style
+    // if (entry.tags.some(t => DANGER_TAGS.has(t))) return "color-mix(in srgb, var(--red-400) 5%, var(--background-secondary))";
+    // if (entry.tags.includes("biome-verified-real")) return "color-mix(in srgb, var(--green-360) 5%, var(--background-secondary))";
+    // return "var(--background-secondary)";
+
+    // old style
+    if (entry.tags.some(t => DANGER_TAGS.has(t))) return "rgba(237, 66, 69, 0.1)";
+    if (entry.tags.includes("biome-verified-real")) return "rgba(59, 165, 92, 0.1)";
+    return "rgba(67, 67, 67, 0.1)";
 }
 
 // ─── JoinCard ─────────────────────────────────────────────────────────────────
@@ -57,7 +69,7 @@ function JoinCard({ entry, onClick, onContextMenu }: {
                 cursor: "pointer",
                 overflow: "hidden",
                 transition: "filter 0.1s",
-                filter: hovered ? "brightness(1.05)" : "none",
+                filter: hovered ? "brightness(1.1)" : "none",
                 userSelect: "none",
             }}
         >

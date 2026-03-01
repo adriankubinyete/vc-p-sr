@@ -182,7 +182,7 @@ export function RecentJoinsTab() {
                         />
                     ))}
                 </div>
-                <JoinLockBanner />
+                <JoinLockBanner variant="minimal" />
             </div>
 
             {/* List */}
@@ -220,11 +220,8 @@ export function RecentJoinsTab() {
                         : `${filtered.length} of ${entries.length}`}
                 </Paragraph>
                 <div style={{ display: "flex", gap: 4 }}>
-                    <Button variant="primary" size="small" onClick={() => JoinStore.addFakes(1)} style={{ padding: "3px 10px", fontSize: 12 }}>
-                        Add fake join
-                    </Button>
                     {entries.length > 0 && (
-                        <Button variant="dangerPrimary" size="small" onClick={() => JoinStore.clear()} style={{ padding: "3px 10px", fontSize: 12 }}>
+                        <Button variant="dangerPrimary" size="small" onClick={() => JoinStore.clear()}>
                             Clear all
                         </Button>
                     )}

@@ -436,6 +436,15 @@ export function TriggersTab() {
         e.target.value = "";
     };
 
+    const handleExport = () => {
+        try {
+            downloadTriggersJson();
+            showToast("Successfully exported triggers!", Toasts.Type.SUCCESS);
+        } catch (error) {
+            showToast(`Failed to export triggers: ${error}`, Toasts.Type.FAILURE);
+        }
+    };
+
     const move = (fromIndex: number, toIndex: number) => {
         if (toIndex < 0 || toIndex >= triggers.length) return;
         const newOrder = [...triggers];
@@ -511,9 +520,9 @@ export function TriggersTab() {
                         : `${filtered.length} of ${triggers.length}`}
                 </Paragraph>
                 <div style={s.toolbarRight}>
-                    <Button size="small" variant="secondary" onClick={downloadTriggersJson}>Export</Button>
-                    <Button size="small" variant="secondary" onClick={() => importRef.current?.click()}>Import</Button>
-                    <Button size="small" variant="primary" onClick={openAddTriggerModal}>+ New Trigger</Button>
+                    <Button size="small" variant="none" onClick={handleExport}>Export</Button>
+                    <Button size="small" variant="none" onClick={() => importRef.current?.click()}>Import</Button>
+                    <Button size="small" variant="positive" onClick={openAddTriggerModal}>+ New trigger</Button>
                 </div>
             </div>
 

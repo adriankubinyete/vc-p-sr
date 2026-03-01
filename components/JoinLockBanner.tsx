@@ -79,19 +79,24 @@ export function JoinLockBanner({
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                 }}>
-                    Join lock active
-                    {" — "}
-                    <span style={{ fontWeight: 400 }}>{lock.triggerName}</span>
+                    Joins locked!
+                    {/* {" "} */}
+                    <span style={{ paddingLeft: 4,opacity: 0.5 }}>
+                    {isMinimal ? (
+                        <>expires in {secsRemaining}s · click here to clear</>
+                    ) : (
+                        <>expires in {secsRemaining}s</>
+                    )}
+                    </span>
                 </div>
 
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
-                    Priority {lock.priority}
-                    {" · "}
-                    {isMinimal
-                        ? <span style={{ opacity: 0.7 }}>click to clear · {secsRemaining}s</span>
-                        : <>expires in {secsRemaining}s</>
-                    }
-                </div>
+                {!isMinimal && (
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                        Trigger "{lock.triggerName}"
+                        {" · "}
+                        Anything with priority {lock.priority} or higher will be ignored!
+                    </div>
+                )}
             </div>
 
             {!isMinimal && (

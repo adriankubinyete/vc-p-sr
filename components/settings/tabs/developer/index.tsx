@@ -12,6 +12,7 @@ import { React, RunningGameStore } from "@webpack/common";
 import { Pill } from "userplugins/sradar/components/Pill";
 import { getRobloxProcess } from "userplugins/sradar/services/RobloxService";
 import { JoinLockStore } from "userplugins/sradar/stores/JoinLockStore";
+import { JoinStore } from "userplugins/sradar/stores/JoinStore";
 
 const logger = new Logger("SolRadar.Developer");
 
@@ -46,31 +47,56 @@ export function DeveloperTab() {
         >
             {/* Actions */}
             <div style={row}>
-                <Button onClick={() => logger.debug(getRobloxProcess())}>
+                <Button size="small" onClick={() => logger.debug(getRobloxProcess())}>
                     getRobloxProcess
                 </Button>
 
-                <Button onClick={() => logger.debug(RunningGameStore.getRunningGames())}>
+                <Button size="small" onClick={() => logger.debug(RunningGameStore.getRunningGames())}>
                     getRunningGames
                 </Button>
 
-                <Button onClick={() => JoinLockStore.activate(10, 30, "fakeLock")}>
-                    fakeLock
+                <Button size="small" variant="positive" onClick={() => JoinLockStore.activate(10, 30, "fakeLock")}>
+                    + add fake lock (p10, 30s)
+                </Button>
+
+                <Button size="small" variant="positive" onClick={() => JoinStore.addFakes(1)}>
+                    + add fake snipe
                 </Button>
             </div>
 
             <Divider />
 
-            {/* Button Variants */}
-            <div style={row}>
-                <Button variant="dangerPrimary" size="small">dangerPrimary</Button>
-                <Button variant="dangerSecondary" size="small">dangerSecondary</Button>
-                <Button variant="link" size="small">link</Button>
-                <Button variant="none" size="small">none</Button>
-                <Button variant="overlayPrimary" size="small">overlayPrimary</Button>
-                <Button variant="positive" size="small">positive</Button>
-                <Button variant="primary" size="small">primary</Button>
-                <Button variant="secondary" size="small">secondary</Button>
+            {/* Buttons Showcase */}
+            <div
+                style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.5rem",
+                    width: "100%"
+                }}
+            >
+
+                {/* Sizes */}
+                <div style={row}>
+                    <Button size="xs">size: xs</Button>
+                    <Button size="small">size: small</Button>
+                    <Button size="medium">size: medium</Button>
+                    <Button size="min">size: min</Button>
+                    {/* <Button size="iconOnly" title="size: iconOnly"/> */}
+                </div>
+
+                {/* Variants */}
+                <div style={row}>
+                    <Button variant="dangerPrimary" size="small">dangerPrimary</Button>
+                    <Button variant="dangerSecondary" size="small">dangerSecondary</Button>
+                    <Button variant="link" size="small">link</Button>
+                    <Button variant="none" size="small">none</Button>
+                    <Button variant="overlayPrimary" size="small">overlayPrimary</Button>
+                    <Button variant="positive" size="small">positive</Button>
+                    <Button variant="primary" size="small">primary</Button>
+                    <Button variant="secondary" size="small">secondary</Button>
+                </div>
+
             </div>
 
             <Divider />

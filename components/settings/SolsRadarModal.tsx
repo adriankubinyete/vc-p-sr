@@ -25,7 +25,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-    { id: "recentJoins", label: "Join History", component: RecentJoinsTab },
+    { id: "recentJoins", label: "Snipe History", component: RecentJoinsTab },
     { id: "triggers", label: "Triggers", component: TriggersTab },
     { id: "settings", label: "Settings", component: SettingsTab },
     { id: "dev", label: "Developer", component: DeveloperTab },

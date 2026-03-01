@@ -19,6 +19,7 @@ import {
     TriggerType,
     useTriggers,
 } from "../../../../stores/TriggerStore";
+import { Pill, PillVariant } from "../../../Pill";
 import { openAddTriggerModal, openEditTriggerModal } from "./TriggerModal";
 
 const logger = new Logger("SolRadar");
@@ -34,13 +35,13 @@ const TYPE_LABELS: Record<TriggerType, string> = {
     CUSTOM: "Custom",
 };
 
-const TYPE_COLORS: Record<TriggerType, string> = {
-    RARE_BIOME: "var(--red-360)",
-    EVENT_BIOME: "var(--green-360)",
-    BIOME: "#ffb6c1",
-    WEATHER: "var(--blue-360)",
-    MERCHANT: "var(--yellow-300)",
-    CUSTOM: "var(--text-muted)",
+const TYPE_PILL_VARIANT: Record<TriggerType, PillVariant> = {
+    RARE_BIOME: "red",
+    EVENT_BIOME: "green",
+    BIOME: "pink",
+    WEATHER: "blue",
+    MERCHANT: "yellow",
+    CUSTOM: "muted",
 };
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
@@ -84,6 +85,8 @@ const s = {
         scrollbarWidth: "thin" as const,
         scrollMarginLeft: 8,
     },
+
+    // Card: mesma abordagem do JoinCard — borda + fundo derivados do estado
     card: (enabled: boolean): React.CSSProperties => ({
         display: "flex",
         alignItems: "center",
@@ -91,15 +94,16 @@ const s = {
         padding: "10px 14px",
         borderRadius: 8,
         cursor: "pointer",
+        userSelect: "none",
+        transition: "filter 0.1s",
         background: enabled
-            ? "color-mix(in srgb, var(--green-360) 8%, var(--background-secondary))"
-            : "var(--background-mod-subtle)",
+            ? "color-mix(in srgb, var(--green-360) 6%, var(--background-secondary))"
+            : "var(--background-secondary)",
         border: `1px solid ${enabled
             ? "color-mix(in srgb, var(--green-360) 25%, transparent)"
             : "var(--background-mod-normal)"}`,
     }),
 
-    // Coluna de botões de ordem (▲▼)
     orderButtons: {
         display: "flex",
         flexDirection: "column" as const,
@@ -119,17 +123,22 @@ const s = {
         transition: "color 0.1s, opacity 0.1s",
     }),
 
-    cardIcon: { width: 36, height: 36, borderRadius: 8, flexShrink: 0, objectFit: "cover" as const },
-    cardIconPlaceholder: (color: string, enabled: boolean): React.CSSProperties => ({
+    cardIcon: {
+        width: 36, height: 36, borderRadius: 8,
+        flexShrink: 0, objectFit: "cover" as const,
+    },
+    cardIconPlaceholder: {
         width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-        background: enabled ? color : "var(--background-modifier-accent)",
-        color: enabled ? "#fff" : "var(--text-muted)",
         fontSize: 15, fontWeight: 700,
         display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "background 0.2s",
-    }),
+        transition: "background 0.2s, color 0.2s",
+    } as React.CSSProperties,
 
-    cardBody: { flex: 1, display: "flex", flexDirection: "column" as const, gap: 3, minWidth: 0 },
+    cardBody: {
+        flex: 1, display: "flex",
+        flexDirection: "column" as const,
+        gap: 3, minWidth: 0,
+    },
     cardName: (enabled: boolean): React.CSSProperties => ({
         fontWeight: 600, fontSize: 14,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
@@ -137,44 +146,7 @@ const s = {
         transition: "color 0.2s",
     }),
     cardMeta: { display: "flex", alignItems: "center", gap: 6 },
-
-    typeBadge: (color: string, enabled: boolean): React.CSSProperties => ({
-        display: "inline-block",
-        padding: "1px 7px", borderRadius: 999,
-        background: enabled
-            ? `color-mix(in srgb, ${color} 15%, transparent)`
-            : "var(--background-modifier-accent)",
-        color: enabled ? color : "var(--text-muted)",
-        fontSize: 11, fontWeight: 700,
-        transition: "background 0.2s, color 0.2s",
-    }),
-
-    priorityBadge: (enabled: boolean): React.CSSProperties => ({
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 3,
-        padding: "1px 7px", borderRadius: 999,
-        background: enabled
-            ? "color-mix(in srgb, var(--brand-500) 15%, transparent)"
-            : "var(--background-modifier-accent)",
-        color: enabled ? "var(--brand-360)" : "var(--text-muted)",
-        fontSize: 11, fontWeight: 700,
-        transition: "background 0.2s, color 0.2s",
-    }),
-
     cardActions: { display: "flex", gap: 6, alignItems: "center", flexShrink: 0 },
-    deleteBtn: (): React.CSSProperties => ({
-        background: "none",
-        border: "none",
-        padding: "4px 8px",
-        borderRadius: 4,
-        cursor: "pointer",
-        color: "var(--text-danger)",
-        fontSize: 13,
-        fontWeight: 600,
-        opacity: 0.7,
-        transition: "opacity 0.1s",
-    }),
 };
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
@@ -194,33 +166,21 @@ function TriggerCard({
     onMoveUp: () => void;
     onMoveDown: () => void;
 }) {
-    const color = TYPE_COLORS[trigger.type];
+    const variant = TYPE_PILL_VARIANT[trigger.type];
     const label = TYPE_LABELS[trigger.type];
     const initial = trigger.name.charAt(0).toUpperCase();
     const { enabled } = trigger.state;
 
-    // Clique esquerdo no body = editar
-    // Clique direito no body = toggle enable/disable
-    const handleCardClick = (e: React.MouseEvent) => {
-        openEditTriggerModal(trigger);
-    };
-
-    const handleCardContextMenu = (e: React.MouseEvent) => {
-        e.preventDefault();
-        toggleTrigger(trigger.id);
-    };
-
-    // Impede que cliques nos botões de ordem bublem para o card
     const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
 
     return (
         <div
             style={s.card(enabled)}
-            onClick={handleCardClick}
-            onContextMenu={handleCardContextMenu}
+            onClick={() => openEditTriggerModal(trigger)}
+            onContextMenu={e => { e.preventDefault(); toggleTrigger(trigger.id); }}
             title="Left click to edit · Right click to toggle"
         >
-            {/* Botões de ordem — isolados do clique do card */}
+            {/* Ordem */}
             <div style={s.orderButtons} onClick={stopPropagation} onContextMenu={stopPropagation}>
                 <button style={s.orderBtn(isFirst)} disabled={isFirst} onClick={onMoveUp} title="Move up">▲</button>
                 <button style={s.orderBtn(isLast)} disabled={isLast} onClick={onMoveDown} title="Move down">▼</button>
@@ -229,30 +189,33 @@ function TriggerCard({
             {/* Ícone */}
             {trigger.iconUrl
                 ? <img src={trigger.iconUrl} alt="" style={s.cardIcon} />
-                : <div style={s.cardIconPlaceholder(color, enabled)}>{initial}</div>
+                : <div
+                    className={`vc-sora-pill-base vc-sora-pill-${enabled ? variant : "muted"}`}
+                    style={{ ...s.cardIconPlaceholder, borderRadius: 8, whiteSpace: "unset" }}
+                >
+                    {initial}
+                </div>
             }
 
             {/* Info */}
             <div style={s.cardBody}>
                 <span style={s.cardName(enabled)}>{trigger.name}</span>
                 <div style={s.cardMeta}>
-                    <span style={s.typeBadge(color, enabled)}>{label}</span>
-                    <span style={s.priorityBadge(enabled)} title="Priority (lower = more important)">
+                    <Pill variant={enabled ? variant : "muted"} size="xs">
+                        {label}
+                    </Pill>
+                    <Pill variant={enabled ? "brand" : "muted"} size="xs" title="Priority (lower = more important)">
                         ★ {trigger.state.priority}
-                    </span>
+                    </Pill>
                 </div>
             </div>
 
-            {/* Delete (só aparece com shift) — isolado do clique do card */}
+            {/* Delete (só com shift) */}
             {shiftHeld && (
                 <div onClick={stopPropagation} onContextMenu={stopPropagation}>
-                    <button
-                        style={s.deleteBtn()}
-                        onClick={() => deleteTrigger(trigger.id)}
-                        title="Delete trigger"
-                    >
+                    <Button variant="dangerPrimary" size="xs" onClick={() => deleteTrigger(trigger.id)} title="Delete trigger">
                         Delete
-                    </button>
+                    </Button>
                 </div>
             )}
         </div>
@@ -269,7 +232,6 @@ export function TriggersTab() {
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(true); };
         const onKeyUp = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
-        // Reset se o usuario alt+tab ou perde foco com shift pressionado
         const onBlur = () => setShiftHeld(false);
 
         window.addEventListener("keydown", onKeyDown);
@@ -335,17 +297,10 @@ export function TriggersTab() {
 
             <div style={s.toolbar}>
                 <Paragraph>{triggers.length} trigger{triggers.length !== 1 ? "s" : ""}</Paragraph>
-
                 <div style={s.toolbarRight}>
-                    <Button size="small" variant="secondary" onClick={downloadTriggersJson}>
-                        Export
-                    </Button>
-                    <Button size="small" variant="secondary" onClick={() => importRef.current?.click()}>
-                        Import
-                    </Button>
-                    <Button size="small" variant="primary" onClick={openAddTriggerModal}>
-                        + New Trigger
-                    </Button>
+                    <Button size="small" variant="secondary" onClick={downloadTriggersJson}>Export</Button>
+                    <Button size="small" variant="secondary" onClick={() => importRef.current?.click()}>Import</Button>
+                    <Button size="small" variant="primary" onClick={openAddTriggerModal}>+ New Trigger</Button>
                 </div>
             </div>
 

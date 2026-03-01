@@ -76,8 +76,8 @@
 }
 
 .vc-sora-pill-yellow {
-    background: color-mix(in srgb, var(--yellow-300) 15%, transparent);
-    color: var(--yellow-300);
+    background: color-mix(in srgb, var(--yellow-360) 15%, transparent);
+    color: var(--yellow-360);
 }
 
 .vc-sora-pill-blue {
@@ -86,13 +86,13 @@
 }
 
 .vc-sora-pill-purple {
-    background: color-mix(in srgb, var(--purple-400) 15%, transparent);
-    color: var(--purple-400);
+    background: color-mix(in srgb, purple 15%, transparent);
+    color: purple;
 }
 
 .vc-sora-pill-pink {
-    background: color-mix(in srgb, var(--pink-400) 15%, transparent);
-    color: var(--pink-400);
+    background: color-mix(in srgb, pink 15%, transparent);
+    color: pink;
 }
 
 .vc-sora-pill-brand {

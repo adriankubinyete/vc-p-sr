@@ -1,6 +1,6 @@
 /*
  * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+ * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -16,418 +16,369 @@
  * GNU Affero General Public License version 3 (AGPL-3.0).
  */
 
+import { Logger } from "@utils/Logger";
 import { exec as execCb } from "child_process";
 import { IpcMainInvokeEvent } from "electron";
-import * as fs from "fs"; // required by detector
-import * as os from "os"; // required by detector
-import * as path from "path"; // required by detector
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { promisify } from "util";
 
-import { LogEntry } from "./Detector";
+// import { LogEntry } from "./Detector";
+
+const logger = new Logger("SolRadar.Native");
 
 const exec = promisify(execCb);
 
-type ProcessLookupTarget =
-  | { type: "tasklist"; processName: string; }
-  | { type: "wmic"; processName: string; };
-
-export async function getProcess(
-  _: IpcMainInvokeEvent,
-  target: ProcessLookupTarget
-): Promise<ProcessInfo[]> {
-
-  if (process.platform !== "win32") {
-    throw new Error("getProcess only works on Windows");
-  }
-
-  const { type, processName } = target;
-
-  if (!processName || typeof processName !== "string") {
-    throw new Error("Invalid argument: processName must be a non-empty string");
-  }
-
-  // this does not return path!
-  if (type === "tasklist") {
-    const { stdout } = await exec(
-      `tasklist /FI "IMAGENAME eq ${processName}" /FO CSV /NH`
-    );
-
-    const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
-
-    return lines.map(line => {
-      const [name, pid] = line
-        .split(/","/)
-        .map(s => s.replace(/"/g, "").trim());
-
-      return {
-        pid: Number(pid),
-        name,
-        path: "" // tasklist does not provide path
-      };
-    });
-  }
-
-  if (type === "wmic") {
-    const cmd = `wmic process where "name='${processName}'" get ProcessId,ExecutablePath /FORMAT:CSV`;
-
-    const { stdout } = await exec(cmd);
-    const lines = stdout.trim().split(/\r?\n/).slice(2); // skip headers
-
-    const processes: ProcessInfo[] = [];
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-
-      const parts = line.split(",");
-      const executablePath = parts[1] ?? "";
-      const pid = Number(parts[2]);
-
-      if (!pid) continue;
-
-      processes.push({
-        pid,
-        name: processName,
-        path: executablePath
-      });
-    }
-
-    return processes;
-  }
-
-  throw new Error(`Unexpected type: ${type}`);
-}
-
-// DONE TEST AREA
+// ─── Tipos públicos ───────────────────────────────────────────────────────────
 
 export type ProcessInfo = {
-  pid: number;
-  name: string;
-  path: string;
+    pid: number;
+    name: string;
+    path: string;
 };
 
-export async function killProcess(
-  _: IpcMainInvokeEvent,
-  target: { pid: number; } | { pname: string; }
-): Promise<void> {
-  if (process.platform !== "win32") return;
+export type ResolvedShareLink =
+    | { ok: true; placeId: string; serverId: string; ownerId: string; isValid: boolean; }
+    | { ok: false; status: number; error: string; };
 
-  const command =
-    "pid" in target
-      ? `taskkill /PID ${target.pid} /F`
-      : `taskkill /IM "${target.pname}" /F`;
-
-  try {
-    await exec(command);
-  } catch {
-    // ignore errors
-  }
-}
-
-export async function openUri(
-  _: IpcMainInvokeEvent,
-  uri: string
-): Promise<void> {
-  if (process.platform !== "win32") {
-    throw new Error("Unsupported platform: only Windows is supported");
-  }
-
-  const command = `start "" "${uri}"`;
-
-  try {
-    await exec(command);
-  } catch (error) {
-    throw new Error(`Failed to start Roblox: ${(error as Error).message}`);
-  }
-}
-
-export async function fetchRobloxCsrf(_: IpcMainInvokeEvent, token: string): Promise<{ status: number; csrf: string | null; }> {
-  try {
-    const res = await fetch("https://apis.roblox.com/sharelinks/v1/resolve-link", {
-      method: "POST",
-      headers: { "Cookie": `.ROBLOSECURITY=${token}` },
-    });
-
-    const csrf = res.headers.get("x-csrf-token");
-    return { status: res.status, csrf };
-  } catch (e) {
-    return { status: -1, csrf: null };
-  }
-}
-
-export async function resolveRobloxShareLink(_: IpcMainInvokeEvent, token: string, csrf: string, shareCode: string): Promise<{ status: number; data: any | null; }> {
-  try {
-    const res = await fetch("https://apis.roblox.com/sharelinks/v1/resolve-link", {
-      method: "POST",
-      headers: {
-        "Cookie": `.ROBLOSECURITY=${token}`,
-        "X-CSRF-TOKEN": csrf,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ linkId: shareCode, linkType: "Server" }),
-    });
-
-    const data = await res.json();
-    return { status: res.status, data };
-  } catch (e) {
-    return { status: -1, data: null };
-  }
+/** Entrada de log do Roblox — definida aqui pra evitar import circular com BiomeDetector. */
+export interface LogEntry {
+    path: string;
+    account: string | null;
+    lastModified: number;
 }
 
 
-/*
+// ─── Roblox: abrir URI ────────────────────────────────────────────────────────
 
-----------------------------------------------------------------------------------------------------------------
-Biome Detector Stuff
+/**
+ * Abre uma URI via `start ""` no Windows.
+ * Usado para deeplinks do tipo `roblox://` e `roblox-player://`.
+ */
+export async function openUri(_: IpcMainInvokeEvent, uri: string): Promise<void> {
+    if (process.platform !== "win32") {
+        throw new Error("openUri only works on Windows.");
+    }
+    if (!uri || typeof uri !== "string") {
+        throw new Error("Invalid argument: uri must be a non-empty string.");
+    }
 
-*/
-
-// Configurações básicas
-const ROBLOX_LOGS_DIR = path.join(os.homedir(), "AppData", "Local", "Roblox", "logs");
-const LOG_TAIL_READ_BYTES = 2 * 1024 * 1024; // 2MB tail para RPCs
-const LOG_READ_SIZE = 1048576; // 1MB para extrair username
-const TIME_THRESHOLD = 7200; // 2h para arquivos recentes (em segundos)
-
-// Retorna lista de logs recentes, com path, account e lastModified
-// Ordenados por lastModified descendente (mais recente primeiro)
-export function getRobloxLogs(_, from?: "username" | "userid"): LogEntry[] {
-  const now = Date.now() / 1000;
-  let files: string[] = [];
-  try {
-    files = fs.readdirSync(ROBLOX_LOGS_DIR)
-      .filter(f => {
-        const fullPath = path.join(ROBLOX_LOGS_DIR, f);
-        if (!fs.statSync(fullPath).isFile()) return false;
-        const mtime = fs.statSync(fullPath).mtime.getTime() / 1000;
-        return (now - mtime) <= TIME_THRESHOLD;
-      })
-      .sort((a, b) => {
-        const ma = fs.statSync(path.join(ROBLOX_LOGS_DIR, a)).mtime.getTime();
-        const mb = fs.statSync(path.join(ROBLOX_LOGS_DIR, b)).mtime.getTime();
-        return mb - ma; // Mais recente primeiro
-      })
-      .map(f => path.join(ROBLOX_LOGS_DIR, f));
-  } catch (err) {
-    console.error("Erro ao listar logs:", err);
-  }
-
-  // Para cada arquivo, extrai account e lastModified
-  const logEntries: LogEntry[] = [];
-  for (const logPath of files) {
     try {
-      const stats = fs.statSync(logPath);
-      // const account = getUseridFromLog(_, logPath);
-      const account = from === "userid" ? getUseridFromLog(_, logPath) : getUsernameFromLog(_, logPath);
-      logEntries.push({
-        path: logPath,
-        account,
-        lastModified: stats.mtime.getTime(),
-      });
-    } catch (err) {
-      console.error(`Erro ao processar ${logPath}:`, err);
+        await exec(`start "" "${uri}"`);
+    } catch (error) {
+        throw new Error(`Failed to open URI "${uri}": ${(error as Error).message}`);
     }
-  }
-
-  return logEntries;
 }
 
-// Extrai username do log (primeiros LOG_READ_SIZE bytes)
-export function getUsernameFromLog(_, logPath: string): string | null {
-  try {
-    const content = fs.readFileSync(logPath, "utf8").substring(0, LOG_READ_SIZE);
-    const match = content.match(/Players\.([^.]+)\.PlayerGui/);
-    return match ? match[1] : null;
-  } catch (err) {
-    console.error(`Erro ao extrair username de ${logPath}:`, err);
-    return null;
-  }
-}
+// ─── Roblox: resolver sharelink ───────────────────────────────────────────────
 
-// Extrai userid do log (primeiros LOG_READ_SIZE bytes)
-export function getUseridFromLog(_: any, logPath: string): string | null {
-  try {
-    const content = fs.readFileSync(logPath, "utf8").substring(0, LOG_READ_SIZE);
-
-    // Regex que garante que "GameJoinLoadTime" aparece ANTES de "userid:"
-    // const match = content.match(/GameJoinLoadTime[\s\S]{0,200}userid:(\d+),/i);
-    const match = content.match(/GameJoinLoadTime[\s\S]*?userid:(\d+),/i);
-
-    return match ? match[1] : null;
-  } catch (err) {
-    console.error(`Erro ao extrair userid de ${logPath}:`, err);
-    return null;
-  }
-}
-
-
-
-// // Extrai RPCs relevantes do tail do log
-// // Busca todos os blocos [BloxstrapRPC] no tail (de trás pra frente, para priorizar recentes)
-// // Cada RPC é um string completo do bloco (do [BloxstrapRPC] até }}})
-export function getRelevantRpcsFromLogTail(
-  _,
-  logPath: string,
-  entireLine = false
-): {
-  rpcs: string[];
-  disconnects: string[];
-  effectiveDisconnected: boolean;
-  mostRecentRpcTime?: string;
-} {
-  if (!fs.existsSync(logPath)) {
-    return {
-      rpcs: [],
-      disconnects: [],
-      effectiveDisconnected: false
-    };
-  }
-
-  try {
-    const stats = fs.statSync(logPath);
-    const readStart = Math.max(0, stats.size - LOG_TAIL_READ_BYTES);
-    const fd = fs.openSync(logPath, "r");
-    const buffer = Buffer.alloc(LOG_TAIL_READ_BYTES);
-
-    fs.readSync(fd, buffer, 0, LOG_TAIL_READ_BYTES, readStart);
-    fs.closeSync(fd);
-
-    const content = buffer.toString("utf8");
-
-    // ---- Disconnects (return ALL of them) ----
-    const disconnectRegex =
-      /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z).*Client:Disconnect/g;
-
-    const disconnects: string[] = [];
-    let match;
-
-    while ((match = disconnectRegex.exec(content))) {
-      disconnects.push(match[1]);
-    }
-
-    const mostRecentDisconnect = disconnects.length
-      ? disconnects[disconnects.length - 1]
-      : undefined;
-
-    const disconnectMs = mostRecentDisconnect
-      ? new Date(mostRecentDisconnect).getTime()
-      : undefined;
-
-    // ---- RPCs ----
-    const rpcs: string[] = [];
-    let last = content.length;
-
-    while (true) {
-      const idx = content.lastIndexOf("[BloxstrapRPC]", last);
-      if (idx === -1) break;
-
-      if (entireLine) {
-        const start = content.lastIndexOf("\n", idx) + 1;
-        const end = content.indexOf("\n", idx);
-        rpcs.unshift(content.substring(start, end === -1 ? content.length : end));
-      } else {
-        let partial = content.substring(idx);
-        const endMarker = partial.indexOf("}}}") + 3;
-        if (endMarker > 3) {
-          partial = partial.substring(0, endMarker);
-          rpcs.unshift(partial);
-        }
-      }
-
-      last = idx - 1;
-    }
-
-    // ---- Timestamp da última RPC ----
-    let mostRecentRpcTime: string | undefined = undefined;
-    let mostRecentRpcMs: number | undefined = undefined;
-
-    if (rpcs.length) {
-      const match = rpcs[rpcs.length - 1].match(
-        /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)/
-      );
-      if (match) {
-        mostRecentRpcTime = match[1];
-        mostRecentRpcMs = new Date(mostRecentRpcTime).getTime();
-      }
-    }
-
-    // ---- effectiveDisconnected ----
-    let effectiveDisconnected = false;
-
-    if (disconnectMs) {
-      if (mostRecentRpcMs && mostRecentRpcMs > disconnectMs) {
-        effectiveDisconnected = false;
-      } else {
-        effectiveDisconnected = true;
-      }
-    }
-
-    return {
-      rpcs,
-      disconnects,
-      effectiveDisconnected,
-      mostRecentRpcTime
-    };
-  } catch (err) {
-    console.error(`Erro lendo RPCs de ${logPath}:`, err);
-    return {
-      rpcs: [],
-      disconnects: [],
-      effectiveDisconnected: false
-    };
-  }
-}
-
-// Extrai bioma de uma RPC string específica (mantido para conveniência, mas pode ser usado no JS)
-export function getBiomeFromRpc(_, rpcMessage: string): string | null {
-  try {
-    const jsonStart = rpcMessage.indexOf("{");
-    if (jsonStart === -1) return null;
-    const jsonStr = rpcMessage.substring(jsonStart);
-    const data = JSON.parse(jsonStr);
-    const largeImage = data.data?.largeImage;
-    return typeof largeImage?.hoverText === "string" ? largeImage.hoverText : null;
-  } catch (err) {
-    console.error("Erro ao parsear RPC JSON:", err);
-    return null;
-  }
-}
-
-interface RobloxUserLookup {
-  requestedUsername: string;
-  id: number | null;
-  name: string;
-  displayName: string;
-}
-
-export async function robloxUsernamesToUserIds(_: any, usernames: string[]): Promise<Record<string, number | null>> {
-  const result: Record<string, number | null> = {};
-
-  for (const name of usernames) result[name] = null;
-
-  if (usernames.length === 0) return result;
-
-  try {
-    const resp = await fetch("https://users.roblox.com/v1/usernames/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        usernames,
-        excludeBannedUsers: false
-      })
+/**
+ * Resolve um share code do Roblox para placeId + serverId em um único passo.
+ *
+ * Internamente:
+ *  1. Faz um POST sem body para obter o CSRF token (cookie já traz a resposta 403)
+ *  2. Usa o CSRF para fazer o POST real de resolução
+ *
+ * Retorna ResolvedShareLink com ok=true e os IDs, ou ok=false com o motivo.
+ */
+export async function resolveShareLink(
+    _: IpcMainInvokeEvent,
+    token: string,
+    shareCode: string
+): Promise<ResolvedShareLink> {
+    const RESOLVE_URL = "https://apis.roblox.com/sharelinks/v1/resolve-link";
+    const headers = (csrf?: string) => ({
+        "Cookie": `.ROBLOSECURITY=${token}`,
+        "Content-Type": "application/json",
+        ...(csrf ? { "X-CSRF-TOKEN": csrf } : {}),
     });
 
-    const data = await resp.json().catch(() => ({ data: [] }));
+    try {
+        // Passo 1 — obtém CSRF (o endpoint sempre retorna 403 na primeira chamada sem CSRF)
+        const csrfRes = await fetch(RESOLVE_URL, {
+            method: "POST",
+            headers: headers(),
+        });
 
-    const returned = data.data ?? [];
+        const csrf = csrfRes.headers.get("x-csrf-token");
+        if (!csrf) {
+            return { ok: false, status: csrfRes.status, error: "CSRF token not returned by server." };
+        }
 
-    for (const entry of returned) {
-      if (entry && entry.requestedUsername) {
-        result[entry.requestedUsername] = entry.id ?? null;
-      }
+        // Passo 2 — resolução real
+        const resolveRes = await fetch(RESOLVE_URL, {
+            method: "POST",
+            headers: headers(csrf),
+            body: JSON.stringify({ linkId: shareCode, linkType: "Server" }),
+        });
+
+        if (!resolveRes.ok) {
+            return { ok: false, status: resolveRes.status, error: `Resolve request failed with HTTP ${resolveRes.status}.` };
+        }
+
+        const data = await resolveRes.json().catch(() => null);
+        if (!data || typeof data !== "object") {
+            return { ok: false, status: resolveRes.status, error: "Invalid JSON in resolve response." };
+        }
+
+        // O campo varia entre versões da API do Roblox — tenta as duas formas conhecidas
+        const placeId: string | undefined =
+            data?.privateServerInviteData?.placeId?.toString() ??
+            data?.placeId?.toString();
+        logger.debug(`[${shareCode}] Place ID: ${placeId}`);
+
+        const serverId: string | undefined =
+            data?.privateServerInviteData?.instanceId ??
+            data?.instanceId ??
+            data?.privateServerInviteData?.privateServerId;
+        logger.debug(`[${shareCode}] Server ID: ${serverId}`);
+
+        const ownerId: string | undefined = data?.privateServerInviteData?.ownerUserId?.toString();
+        logger.debug(`[${shareCode}] Owner ID: ${ownerId}`);
+
+        const isValid: boolean | undefined = data?.privateServerInviteData?.status === "Valid";
+        logger.debug(`[${shareCode}] Valid: ${isValid}`);
+
+        if (!placeId || !serverId || !ownerId || !isValid) {
+            return { ok: false, status: resolveRes.status, error: `placeId: ${placeId}, serverId: ${serverId}, ownerId: ${ownerId}, isValid: ${isValid} | Unexpected response shape: ${JSON.stringify(data)}` };
+        }
+
+        return { ok: true, placeId, serverId, ownerId, isValid };
+
+    } catch (error) {
+        return { ok: false, status: -1, error: (error as Error).message };
     }
+}
+
+// ─── Processos ────────────────────────────────────────────────────────────────
+
+type ProcessLookupTarget =
+    | { type: "tasklist"; processName: string; }
+    | { type: "wmic"; processName: string; };
+
+export async function getProcess(
+    _: IpcMainInvokeEvent,
+    target: ProcessLookupTarget
+): Promise<ProcessInfo[]> {
+    if (process.platform !== "win32") {
+        throw new Error("getProcess only works on Windows.");
+    }
+
+    const { type, processName } = target;
+    if (!processName || typeof processName !== "string") {
+        throw new Error("Invalid argument: processName must be a non-empty string.");
+    }
+
+    if (type === "tasklist") {
+        const { stdout } = await exec(
+            `tasklist /FI "IMAGENAME eq ${processName}" /FO CSV /NH`
+        );
+        return stdout.trim().split(/\r?\n/).filter(Boolean).map(line => {
+            const [name, pid] = line.split(/","/).map(s => s.replace(/"/g, "").trim());
+            return { pid: Number(pid), name, path: "" };
+        });
+    }
+
+    if (type === "wmic") {
+        const { stdout } = await exec(
+            `wmic process where "name='${processName}'" get ProcessId,ExecutablePath /FORMAT:CSV`
+        );
+        return stdout.trim().split(/\r?\n/).slice(2).flatMap(line => {
+            if (!line.trim()) return [];
+            const parts = line.split(",");
+            const pid = Number(parts[2]);
+            if (!pid) return [];
+            return [{ pid, name: processName, path: parts[1] ?? "" }];
+        });
+    }
+
+    throw new Error(`Unknown process lookup type: ${type}`);
+}
+
+export async function killProcess(
+    _: IpcMainInvokeEvent,
+    target: { pid: number; } | { pname: string; }
+): Promise<void> {
+    if (process.platform !== "win32") return;
+
+    const command = "pid" in target
+        ? `taskkill /PID ${target.pid} /F`
+        : `taskkill /IM "${target.pname}" /F`;
+
+    try {
+        await exec(command);
+    } catch {
+        // silencioso — o processo pode já ter encerrado
+    }
+}
+
+// ─── Biome detection ──────────────────────────────────────────────────────────
+// As funções abaixo são responsabilidade do Detector.ts mas ficam aqui
+// pois requerem acesso ao Node/fs (native context).
+
+const ROBLOX_LOGS_DIR = path.join(os.homedir(), "AppData", "Local", "Roblox", "logs");
+const LOG_TAIL_READ_BYTES = 2 * 1024 * 1024; // 2 MB — tail lido por tick
+const LOG_HEAD_READ_BYTES = 1 * 1024 * 1024; // 1 MB — head lido pra extrair userid/username
+const LOG_MAX_AGE_S = 7_200; // 2h — logs mais velhos são ignorados
+
+/**
+ * Lista logs do Roblox recentes e extrai o account (userid ou username) de cada um.
+ * Usa uma única chamada a `fs.statSync` por arquivo (cache local) em vez de três.
+ */
+export function getRobloxLogs(_: IpcMainInvokeEvent, from: "username" | "userid"): LogEntry[] {
+    const nowMs = Date.now();
+
+    let entries: { file: string; mtime: number; }[] = [];
+
+    try {
+        entries = fs.readdirSync(ROBLOX_LOGS_DIR).flatMap(f => {
+            const full = path.join(ROBLOX_LOGS_DIR, f);
+            try {
+                const stat = fs.statSync(full);
+                if (!stat.isFile()) return [];
+                const ageS = (nowMs - stat.mtime.getTime()) / 1000;
+                if (ageS > LOG_MAX_AGE_S) return [];
+                return [{ file: full, mtime: stat.mtime.getTime() }];
+            } catch {
+                return [];
+            }
+        });
+    } catch (err) {
+        console.error("[SolRadar.Native] Error listing Roblox logs:", err);
+        return [];
+    }
+
+    // Sort newest first
+    entries.sort((a, b) => b.mtime - a.mtime);
+
+    return entries.flatMap(({ file, mtime }) => {
+        try {
+            const account = from === "userid"
+                ? _getUseridFromLog(file)
+                : _getUsernameFromLog(file);
+            return [{ path: file, account, lastModified: mtime }];
+        } catch {
+            return [];
+        }
+    });
+}
+
+/** @internal — só chamado pelo getRobloxLogs, não exposto como IPC handler. */
+function _getUsernameFromLog(logPath: string): string | null {
+    try {
+        const head = _readHead(logPath);
+        return head.match(/Players\.([^.]+)\.PlayerGui/)?.[1] ?? null;
+    } catch { return null; }
+}
+
+/** @internal */
+function _getUseridFromLog(logPath: string): string | null {
+    try {
+        const head = _readHead(logPath);
+        return head.match(/GameJoinLoadTime[\s\S]*?userid:(\d+),/i)?.[1] ?? null;
+    } catch { return null; }
+}
+
+/** Lê os primeiros LOG_HEAD_READ_BYTES do arquivo como UTF-8. */
+function _readHead(logPath: string): string {
+    const fd = fs.openSync(logPath, "r");
+    const buffer = Buffer.alloc(LOG_HEAD_READ_BYTES);
+    const read = fs.readSync(fd, buffer, 0, LOG_HEAD_READ_BYTES, 0);
+    fs.closeSync(fd);
+    return buffer.slice(0, read).toString("utf8");
+}
+
+/**
+ * Lê o tail do log e extrai RPCs de bioma e eventos de desconexão.
+ *
+ * Retorna:
+ * - `rpcs`                — linhas completas de BloxstrapRPC, da mais antiga à mais nova
+ * - `disconnects`         — timestamps de Client:Disconnect encontrados no tail
+ * - `effectiveDisconnected` — true se o disconnect mais recente é posterior à RPC mais recente
+ */
+export function getRelevantRpcsFromLogTail(
+    _: IpcMainInvokeEvent,
+    logPath: string,
+): {
+    rpcs: string[];
+    disconnects: string[];
+    effectiveDisconnected: boolean;
+} {
+    const empty = { rpcs: [], disconnects: [], effectiveDisconnected: false };
+    if (!fs.existsSync(logPath)) return empty;
+
+    try {
+        const { size } = fs.statSync(logPath);
+        const readFrom = Math.max(0, size - LOG_TAIL_READ_BYTES);
+        const fd = fs.openSync(logPath, "r");
+        const buffer = Buffer.alloc(LOG_TAIL_READ_BYTES);
+        const bytesRead = fs.readSync(fd, buffer, 0, LOG_TAIL_READ_BYTES, readFrom);
+        fs.closeSync(fd);
+        const content = buffer.slice(0, bytesRead).toString("utf8");
+
+        // ── Disconnects ───────────────────────────────────────────────────────
+        const disconnects: string[] = [];
+        const disconnectRe = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z).*Client:Disconnect/g;
+        let m: RegExpExecArray | null;
+        while ((m = disconnectRe.exec(content))) disconnects.push(m[1]);
+        const lastDisconnectMs = disconnects.length
+            ? new Date(disconnects[disconnects.length - 1]).getTime()
+            : undefined;
+
+        // ── RPCs — busca reversa pra manter O(tail) em vez de O(file) ────────
+        const rpcs: string[] = [];
+        let searchFrom = content.length;
+        while (true) {
+            const idx = content.lastIndexOf("[BloxstrapRPC]", searchFrom);
+            if (idx === -1) break;
+            const lineStart = content.lastIndexOf("\n", idx) + 1;
+            const lineEnd = content.indexOf("\n", idx);
+            rpcs.unshift(content.substring(lineStart, lineEnd === -1 ? content.length : lineEnd));
+            searchFrom = idx - 1;
+        }
+
+        // ── effectiveDisconnected ─────────────────────────────────────────────
+        let mostRecentRpcMs: number | undefined;
+        if (rpcs.length) {
+            const ts = rpcs[rpcs.length - 1].match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)/);
+            if (ts) mostRecentRpcMs = new Date(ts[1]).getTime();
+        }
+
+        const effectiveDisconnected = lastDisconnectMs !== undefined
+            && (mostRecentRpcMs === undefined || mostRecentRpcMs <= lastDisconnectMs);
+
+        return { rpcs, disconnects, effectiveDisconnected };
+    } catch (err) {
+        console.error(`[SolRadar.Native] Error reading log tail ${logPath}:`, err);
+        return empty;
+    }
+}
+
+// ─── Roblox API ───────────────────────────────────────────────────────────────
+
+/**
+ * Converte uma lista de usernames do Roblox em userids via API pública.
+ * Usernames não encontrados ficam como null no resultado.
+ */
+export async function robloxUsernamesToUserIds(
+    _: IpcMainInvokeEvent,
+    usernames: string[]
+): Promise<Record<string, number | null>> {
+    const result: Record<string, number | null> = Object.fromEntries(usernames.map(n => [n, null]));
+    if (!usernames.length) return result;
+
+    try {
+        const res = await fetch("https://users.roblox.com/v1/usernames/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ usernames, excludeBannedUsers: false }),
+        });
+        const data = await res.json().catch(() => ({ data: [] }));
+        for (const entry of (data.data ?? [])) {
+            if (entry?.requestedUsername) result[entry.requestedUsername] = entry.id ?? null;
+        }
+    } catch { /* silencioso */ }
 
     return result;
-  } catch (err) {
-    return result; // silencioso igual o sharelink
-  }
 }
-

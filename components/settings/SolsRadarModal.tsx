@@ -1,0 +1,131 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { Heading } from "@components/Heading";
+import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
+import { React } from "@webpack/common";
+
+import { UIState } from "../../stores/UIStateStore";
+import { DeveloperTab } from "./tabs/developer";
+import { RecentJoinsTab } from "./tabs/recentJoins";
+import { SettingsTab } from "./tabs/settings";
+import { TriggersTab } from "./tabs/triggers";
+
+// ─── Definição das tabs ────────────────────────────────────────────────────────
+
+type TabId = "recentJoins" | "triggers" | "settings" | "dev";
+
+interface Tab {
+    id: TabId;
+    label: string;
+    component: React.ComponentType;
+}
+
+const TABS: Tab[] = [
+    { id: "recentJoins", label: "Snipe History", component: RecentJoinsTab },
+    { id: "triggers", label: "Triggers", component: TriggersTab },
+    { id: "settings", label: "Settings", component: SettingsTab },
+    { id: "dev", label: "Developer", component: DeveloperTab },
+];
+
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+
+const styles = {
+    root: {
+        display: "flex",
+        flexDirection: "column" as const,
+        minHeight: 0,
+        height: "100%",
+    },
+    tabBar: {
+        display: "flex",
+        gap: 2,
+        borderBottom: "2px solid var(--background-modifier-accent)",
+        marginBottom: 16,
+    },
+    tabBtn: (active: boolean): React.CSSProperties => ({
+        background: "none",
+        border: "none",
+        borderBottom: active
+            ? "2px solid var(--brand-500)"
+            : "2px solid transparent",
+        marginBottom: -2,
+        padding: "8px 14px",
+        color: active ? "var(--text-normal)" : "var(--text-muted)",
+        fontWeight: active ? 600 : 400,
+        cursor: "pointer",
+        fontSize: 14,
+        transition: "color 0.15s, border-color 0.15s",
+    }),
+    content: {
+        flex: 1,
+        minHeight: 0,
+    },
+};
+
+// ─── Modal principal ──────────────────────────────────────────────────────────
+
+interface SolsRadarModalProps {
+    modalProps: ModalProps;
+    initialTab?: TabId;
+}
+
+export function SolsRadarModal({ modalProps, initialTab }: SolsRadarModalProps) {
+    const [activeTab, setActiveTab] = React.useState<TabId>(initialTab ?? UIState.get("activeTab"));
+
+    const ActiveComponent = TABS.find(t => t.id === activeTab)!.component;
+
+    const handleTabChange = (tab: TabId) => {
+        setActiveTab(tab);
+        UIState.set("activeTab", tab);
+    };
+
+    return (
+        <ModalRoot {...modalProps} size={ModalSize.MEDIUM}>
+            <ModalHeader>
+                <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    width: "100%",
+                }}>
+                    <Heading tag="h2">Sol Radar</Heading>
+                    <ModalCloseButton onClick={modalProps.onClose} />
+                </div>
+            </ModalHeader>
+            {/* Tab bar */}
+            <div style={styles.tabBar}>
+                {TABS.map(tab => (
+                    <button
+                        key={tab.id}
+                        style={styles.tabBtn(activeTab === tab.id)}
+                        onClick={() => handleTabChange(tab.id)}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+            <ModalContent separator>
+                <div style={styles.root}>
+
+                    {/* Conteúdo da tab ativa */}
+                    <div style={styles.content}>
+                        <ActiveComponent />
+                    </div>
+                </div>
+            </ModalContent>
+        </ModalRoot >
+    );
+}
+
+// ─── Helper de abertura ───────────────────────────────────────────────────────
+//
+// Use em qualquer lugar:
+//   openSolsRadarModal()               → abre em Recent Joins
+//   openSolsRadarModal("triggers")     → abre direto em Triggers
+//   openSolsRadarModal("settings")     → abre direto em Settings
+
+export const openSolsRadarModal = (initialTab?: TabId) =>
+    openModal(p => <SolsRadarModal modalProps={p} initialTab={initialTab} />);

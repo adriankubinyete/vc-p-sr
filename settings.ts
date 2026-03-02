@@ -1,482 +1,141 @@
 /*
  * Vencord, a Discord client mod
- * Copyright (c) 2025 Vendicated and contributors
+ * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
-// @useful: get unique biomes from logs:
-// grep -h -oP '"largeImage"\s*:\s*\{[^}]*"hoverText"\s*:\s*"\K[^"]+' *.log | sort | uniq
 
 import { definePluginSettings } from "@api/Settings";
 import { OptionType } from "@utils/types";
 
-import { createLogger } from "./CustomLogger";
-import { BiomeDetector } from "./Detector";
-
-function debounce<T extends (...args: any[]) => void>(fn: T, wait: number) {
-    let timeout: any;
-    return (...args: Parameters<T>) => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn(...args), wait);
-    };
-}
-
-// @TODO: maybe add keywords here too so user can change it?
-// @TODO (farther away): maybe add a way to add custom triggers????
-export const DEFAULT_TRIGGER_SETTING: TriggerSetting = {
-    enabled: false,
-    join: true,
-    notify: true,
-    autoClearCooldown: false,
-    priority: 0,
-    joinCooldown: 0,
-};
-
-export const TriggerTypes = {
-    RARE_BIOME: "rare_biome",
-    EVENT_BIOME: "event_biome",
-    NORMAL_BIOME: "normal_biome",
-    WEATHER: "weather",
-    MERCHANT: "merchant",
-    SPECIAL: "special",
-};
-
-export const isBiomeTriggerType = (type: string) => {
-    return [TriggerTypes.RARE_BIOME, TriggerTypes.EVENT_BIOME, TriggerTypes.NORMAL_BIOME, TriggerTypes.WEATHER].includes(type);
-};
-
-export const isMerchantTriggerType = (type: string) => {
-    return type === TriggerTypes.MERCHANT;
-};
-
-export type TriggerType = typeof TriggerTypes[keyof typeof TriggerTypes];
-
-export interface TriggerDefinition {
-    type: TriggerType;
-    name: string; // note: for biome detection, this has to match the RPC's hoverText entry!
-    keywords: string[];
-    iconUrl: string;
-}
-
-export interface TriggerSetting {
-    enabled: boolean;
-    join: boolean;
-    notify: boolean;
-    autoClearCooldown: boolean;
-    priority: number;
-    joinCooldown: number;
-}
-
-export const TriggerDefs = {
-    GLITCHED: {
-        // 1/30000 per biome change
-        type: TriggerTypes.RARE_BIOME,
-        name: "Glitched",
-        keywords: ["glitch", "glitched", "glich", "glith"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/GLITCHED.png",
-    },
-    CYBERSPACE: {
-        // 1/5000 per device use
-        type: TriggerTypes.RARE_BIOME,
-        name: "Cyberspace",
-        keywords: ["cyber", "cyberspace", "cybers", "cyberspce", "cyber space", "cyber-space"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/CYBERSPACE.png",
-    },
-    DREAMSPACE: {
-        // 1/3500000 per second
-        type: TriggerTypes.RARE_BIOME,
-        name: "Dreamspace",
-        keywords: ["dream", "dream space", "dreamspace"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/DREAMSPACE.png",
-    },
-    // BLOODRAIN: {
-    //     type: TriggerTypes.EVENT_BIOME,
-    //     name: "Blood Rain",
-    //     keywords: ["blood rain", "blood", "bloodrain"],
-    //     iconUrl: "https://maxstellar.github.io/biome_thumb/BLOOD_RAIN.png",
-    // },
-    // PUMPKINMOON: {
-    //     type: TriggerTypes.EVENT_BIOME,
-    //     name: "Pumpkin Moon",
-    //     keywords: ["pump", "pumpkin", "pmoon"],
-    //     iconUrl: "https://maxstellar.github.io/biome_thumb/PUMPKIN_MOON.png",
-    // },
-    // GRAVEYARD: {
-    //     type: TriggerTypes.EVENT_BIOME,
-    //     name: "Graveyard",
-    //     keywords: ["grave", "graveyard", "grave yard"],
-    //     iconUrl: "https://maxstellar.github.io/biome_thumb/GRAVEYARD.png",
-    // },
-    // AURORA: {
-    //     type: TriggerTypes.EVENT_BIOME,
-    //     name: "Aurora",
-    //     keywords: ["aurora", "globe", "snowglobe"],
-    //     iconUrl: "https://raw.githubusercontent.com/vexthecoder/OysterDetector/main/assets/aurora.png",
-    // },
-    NULL: {
-        // 1/10100 per second
-        type: TriggerTypes.NORMAL_BIOME,
-        name: "Null",
-        keywords: ["null"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/NULL.png",
-    },
-    CORRUPTION: {
-        // 1/9000 per second
-        type: TriggerTypes.NORMAL_BIOME,
-        name: "Corruption",
-        keywords: ["corruption", "corrupt"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/CORRUPTION.png",
-    },
-    HEAVEN: {
-        // 1/7777 per second
-        type: TriggerTypes.NORMAL_BIOME,
-        name: "Heaven",
-        keywords: ["heaven"], // bruh (heavenly potion)
-        iconUrl: "https://maxstellar.github.io/biome_thumb/HEAVEN.png",
-    },
-    STARFALL: {
-        // 1/7500 per second
-        type: TriggerTypes.NORMAL_BIOME,
-        name: "Starfall",
-        keywords: ["starfall", "star fall"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/STARFALL.png",
-    },
-    HELL: {
-        // 1/6666 per second
-        type: TriggerTypes.NORMAL_BIOME,
-        name: "Hell",
-        keywords: ["hell"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/HELL.png",
-    },
-    SANDSTORM: {
-        // 1/3000 per second
-        type: TriggerTypes.NORMAL_BIOME,
-        name: "Sand Storm",
-        keywords: ["sand", "sand storm", "sandstorm"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/SAND%20STORM.png",
-    },
-    RAINY: {
-        // 1/750 per second
-        type: TriggerTypes.WEATHER,
-        name: "Rainy",
-        keywords: ["rainy"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/RAINY.png",
-    },
-    SNOWY: {
-        // 1/600 per second
-        type: TriggerTypes.WEATHER,
-        name: "Snowy",
-        keywords: ["snowy"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/SNOWY.png",
-    },
-    WINDY: {
-        // 1/500 per second
-        type: TriggerTypes.WEATHER,
-        name: "Windy",
-        keywords: ["windy"],
-        iconUrl: "https://maxstellar.github.io/biome_thumb/WINDY.png",
-    },
-    MARI: {
-        type: TriggerTypes.MERCHANT,
-        name: "Mari",
-        keywords: ["mari", "voidcoin", "void coin"],
-        iconUrl: "https://raw.githubusercontent.com/vexthecoder/OysterDetector/refs/heads/main/assets/mari.png",
-    },
-    JESTER: {
-        type: TriggerTypes.MERCHANT,
-        name: "Jester",
-        keywords: ["jester", "oblivion"],
-        iconUrl: "https://raw.githubusercontent.com/vexthecoder/OysterDetector/refs/heads/main/assets/jester.png",
-    },
-    RIN: {
-        type: TriggerTypes.MERCHANT,
-        name: "Rin",
-        keywords: ["rin"],
-        iconUrl: "",
-    }
-} as const;
-
-
 export const settings = definePluginSettings({
-    /*
-    * Main Settings
-    */
-    joinEnabled: {
+    // main ui stuff
+    pluginIconLocation: {
+        type: OptionType.SELECT,
+        description: "Where to place the menu button",
+        options: [
+            { label: "Chat Bar (default)", value: "chatbar", default: true }, // this is the most stable place
+            { label: "Title Bar", value: "titlebar" },
+            { label: "Hidden (not recommended)", value: "hide" }
+        ],
+        restartNeeded: true
+    },
+    pluginIconShortcutAction: {
+        type: OptionType.SELECT,
+        description: "What to do when right-clicking the menu button",
+        options: [
+            { label: "Toggle global auto-join", value: "toggle_join" },
+            { label: "Toggle global notifications", value: "toggle_notification" },
+            { label: "Toggle both (default)", value: "toggle_both", default: true },
+            { label: "Do nothing", value: "none" }
+        ]
+    },
+
+    // main behavior
+    autoJoinEnabled: {
         type: OptionType.BOOLEAN,
-        description: "Automatically join private server links which matches an enabled trigger.",
+        description: "Global auto-join state. Takes precedence over the trigger-specific setting.",
+        default: false,
+    },
+    notificationEnabled: {
+        type: OptionType.BOOLEAN,
+        description: "Global notification state. Takes precedence over the trigger-specific setting.",
         default: false
     },
-    notifyEnabled: {
+    closeGameBeforeJoin: {
         type: OptionType.BOOLEAN,
-        description: "Send a desktop notification when a server link that matches an enabled trigger is detected.",
-        default: false
+        description: "Close Roblox before attempting to join a server. Slightly increases join time (~100-200ms) but prevents joins from straight up failing.",
+        default: true,
     },
-    joinCloseGameBefore: {
+
+    // others
+    flattenEmbeds: {
         type: OptionType.BOOLEAN,
-        description: "Close any open Roblox game before joining. Makes you join slightly slower.",
+        description: "Whether to merge embeds into the message content when checking for triggers. If you're monitoring a Macro server, you might want to enable this.",
         default: true
     },
 
-    /*
-    * UI and shortcut
-    */
-    uiShowPluginIcon: {
+    // ui
+    hideInactiveIndicator: {
         type: OptionType.BOOLEAN,
-        description: "Shows an icon in the title bar for quick access to the plugin's settings.",
+        description: "Whether to hide the red 'inactive' dot in menu button when joins are disabled.",
         default: true,
-        restartNeeded: true
     },
-    uiShortcutAction: {
+
+    // monitoring
+    monitoredChannels: {
+        type: OptionType.STRING,
+        description: "Comma-separated list of channel IDs that the plugin should monitor. If empty, no channel will be monitored. Example: `123456789012345678, 987654321098765432`",
+        default: "",
+    },
+    ignoredGuilds: {
+        type: OptionType.STRING,
+        description: "Comma-separated list of guild IDs that the plugin should ignore. Useful if you want to use the plugin but avoid monitoring a specific guild. Created because of Glitch Hunting servers with a no-snipers policy. Example: `123456789012345678, 987654321098765432`",
+        default: "",
+    },
+    ignoredChannels: {
+        type: OptionType.STRING,
+        description: "Comma-separated list of channel IDs that the plugin should ignore. Example: `123456789012345678, 987654321098765432`",
+        default: "",
+    },
+    ignoredUsers: {
+        type: OptionType.STRING,
+        description: "Comma-separated list of user IDs that the plugin should ignore. Example: `123456789012345678, 987654321098765432`",
+        default: "",
+    },
+
+    // link check
+    linkVerification: {
         type: OptionType.SELECT,
-        description: "What happens when you right-click the chat bar button.",
-        default: "toggleAutoJoin",
+        description: "When to verify links. Requires a robloxToken configured to work. If set to after, once a bad link is detected, the plugin will execute the onBadLink action.",
         options: [
-            { label: "No action", value: "none" },
-            { label: "Toggle AutoJoin", value: "toggleJoin" },
-            { label: "Toggle AutoJoin and Notifications", value: "toggleJoinAndNotifications" },
-        ],
-        hidden: true
+            { label: "Disabled", value: "disabled", default: true },
+            { label: "Before Joining (slower, safer)", value: "before" },
+            { label: "After Joining", value: "after" },
+        ]
     },
-    uiShowTagsInInactiveTriggers: {
-        type: OptionType.BOOLEAN,
-        description: "Show trigger tags even on inactive triggers on the trigger list.",
-        default: true,
-        hidden: true
-    },
-
-    /*
-    * Monitoring
-    */
-    monitorChannelList: {
+    robloxToken: {
         type: OptionType.STRING,
-        description: "Comma-separated channel IDs that will be monitored for private server links.",
+        description: "This is NOT required for the plugin to work! Your .ROBLOSECURITY cookie value. Required for link verification. Keep this private and never share it with anyone. Highly recommended to make an alt account just to use it's token for this. The plugin only uses it to verify if a server link is valid by making a request to Roblox's API. It does NOT store or transmit the token in any other way.",
         default: "",
-        hidden: true
     },
-    monitorNavigateToChannelsOnStartup: {
-        type: OptionType.BOOLEAN,
-        description: "Whenever you start Vencord, it will quickly navigate to each monitored channel to ensure they are loaded.",
-        default: false
-    },
-    monitorBlockedUserList: {
-        type: OptionType.STRING,
-        description: "Comma-separated user IDs that will be ignored when monitoring for private server links.",
-        default: "",
-        hidden: true
-    },
-    monitorBlockUnsafeServerMessageAuthors: {
-        type: OptionType.BOOLEAN,
-        description: "Automatically put users who sends server links which leads to non-allowed places into the monitorBlockedUserList. This will only work if you are verifying links.",
-        default: false,
-        hidden: true
-    },
-    monitorGreedyMode: {
-        type: OptionType.BOOLEAN,
-        description: "Ignore monitorChannelList and simply monitor all possible channels. Not recommended.",
-        default: false,
-        hidden: true
-    },
-    monitorGreedyExceptionList: {
-        type: OptionType.STRING,
-        description: "Comma-separated channel IDs to ignore when using greedy mode.",
-        default: "",
-        hidden: true
-    },
-    monitorInterpretEmbeds: {
-        type: OptionType.BOOLEAN,
-        description: "Append embed descriptions and titles to the message content when searching for valid trigger messages.",
-        default: true,
-        hidden: true
-    },
-
-    /*
-    * Link verification
-    */
-
-    verifyRoblosecurityToken: {
-        type: OptionType.STRING,
-        description: ".ROBLOSECURITY token used for verifying place IDs when joining. It is required for any place ID verification to work. If it's not set, no verification will be done no matter what settings you have. This is totally optional if you don't want to use place ID verification. (Recommendation: create a fresh throwaway account for this purpose)",
-        default: ""
-    },
-    verifyMode: {
+    onBadLink: {
         type: OptionType.SELECT,
-        description: "When to verify Roblox place IDs.",
-        default: "none",
+        description: "What to do when a bad link is detected. A bad link is a server link that fails verification (e.g. because it's expired or fake).",
         options: [
-            { label: "No verification", value: "none" },
-            { label: "Verify before joining (may slow your join time)", value: "before" },
-            { label: "Verify after joining (riskier but won't slow your join time)", value: "after" },
-        ],
-        hidden: true
+            { label: "Nothing (not recommended)", value: "nothing" },
+            { label: "Join a public server", value: "public", default: true },
+            { label: "Close Roblox", value: "close" },
+        ]
     },
-    verifyAllowedPlaceIds: {
+    allowedPlaceIds: {
         type: OptionType.STRING,
-        description: "Comma-separated list of allowed place IDs. If empty, all place IDs are allowed.",
-        default: "15532962292",
-        hidden: true
-    },
-    verifyBlockedPlaceIds: {
-        type: OptionType.STRING,
-        description: "Comma-separated list of blocked place IDs. If empty, no place IDs are blocked.",
+        description: "Comma-separated list of place IDs that are allowed to be joined. If empty, all place IDs are allowed. Example: `123456789012345678, 987654321098765432`",
         default: "",
-        hidden: true
     },
-    verifyAfterJoinFailFallbackDelayMs: {
+
+    // detector
+    detectorEnabled: {
+        type: OptionType.BOOLEAN,
+        description: "Enable biome detection. When active, the plugin reads your Roblox log files to verify whether the biome you joined actually matches what was announced. Requires at least one account configured below.",
+        default: false,
+        restartNeeded: true, // i am NOT gonna hot-reload this
+    },
+    detectorAccounts: {
+        type: OptionType.STRING,
+        description: "Comma-separated list of Roblox usernames to monitor for biome detection. If empty, biome detection is disabled.",
+        default: "",
+        restartNeeded: true, // i am NOT gonna hot-reload this
+    },
+    detectorTimeoutMs: {
         type: OptionType.NUMBER,
-        description: "If the place ID verification after joining fails, wait this many milliseconds before executing the safety action.",
+        description: "How long (in milliseconds) to wait for a biome to be detected after joining. If no biome is detected within this window, the join is marked as timed out and the join lock is released. Recommended: 30000",
+        default: 30000,
+        restartNeeded: true, // i am NOT gonna hot-reload this
+    },
+    detectorIntervalMs: {
+        type: OptionType.NUMBER,
+        description: "How often (in milliseconds) the detector reads your Roblox log files. Lower values give faster detection but read the disk more frequently. Recommended: 5000. Advised to keep this above 1000 due to minimal returns.",
         default: 5000,
-        hidden: true
+        restartNeeded: true, // i am NOT gonna hot-reload this
     },
-    verifyAfterJoinFailFallbackAction: {
-        type: OptionType.SELECT,
-        description: "Action to execute when place ID verification fails after you already joined the server.",
-        default: "joinSols",
-        options: [
-            { label: "Join Sol's RNG public server", value: "joinSols" },
-            { label: "Quit game", value: "quit" },
-        ],
-        hidden: true
-    },
-
-    /*
-    * Autojoin
-    */
-    biomeDetectorEnabled: {
-        type: OptionType.BOOLEAN,
-        description: "Enable the biome detector for biome validation.",
-        default: false,
-        onChange: (value: boolean) => {
-            if (value) {
-                BiomeDetector.setAccounts(settings.store.biomeDetectorAccounts.split(","));
-                BiomeDetector.start(settings.store.biomeDetectorPoolingRateMs);
-            } else {
-                BiomeDetector.stop();
-                BiomeDetector.removeAllListeners();
-            }
-        }
-    },
-    biomeDetectorPoolingRateMs: {
-        type: OptionType.NUMBER,
-        description: "How often to 'refresh' biome detection, in milliseconds.",
-        default: 1000,
-        /**
-         * i am so sorry for what im about to do :husk:
-         */
-        min: 250,
-        max: 9999,
-        onChange: (() =>
-            debounce((value: number) => {
-                // console.log(`[SolsRadar] test debouncedChangeRate: ${value}`);
-                // NOTE: handle this elsewhere, not my job!!!!!
-                // if (value < 250) {
-                //     value = 250;
-                //     settings.store.biomeDetectorPoolingRateMs = 250;
-                //     showToast("Do NOT set it under 250ms", Toasts.Type.FAILURE);
-                // }
-
-                if (settings.store.biomeDetectorEnabled) {
-                    BiomeDetector.stop();
-                    BiomeDetector.start(value);
-                }
-            }, 500)
-        )(),
-        hidden: true
-    },
-    biomeDetectorAccounts: {
-        type: OptionType.STRING,
-        description: "Comma-separated list of Roblox accounts to monitor. If empty, biome detection is disabled.",
-        default: "",
-        /**
-         * NOTE: I actually have made this work with runtime changes (see below),
-         * but I dont want user messing with this so I'll just set restartNeeded on this
-         */
-        restartNeeded: true,
-        // onChange: (() => {
-        //     const fn = debounce((value: string) => {
-        //         console.log(`[SolsRadar] test debouncedUpdateAccounts: ${value}`);
-        //         const accounts = value.split(",").map(v => v.trim()).filter(Boolean);
-        //         if (settings.store.biomeDetectorEnabled) {
-        //             BiomeDetector.stop();
-        //             BiomeDetector.setAccounts(accounts);
-        //             BiomeDetector.start(settings.store.biomeDetectorPoolingRateMs);
-        //         } else {
-        //             BiomeDetector.setAccounts(accounts);
-        //         }
-        //     }, 500);
-        //     return fn;
-        // })()
-    },
-    biomeDetectorStopRedundantJoins: {
-        type: OptionType.BOOLEAN,
-        description: "Prevents joining a match if the biome detector shows that you're already in that biome.",
-        default: true,
-    },
-
-    /*
-    * Developer options
-    */
-    loggingLevel: {
-        type: OptionType.SELECT,
-        description: "Console logging level",
-        default: "info",
-        options: [
-            { label: "Verbose", value: "verbose" },
-            { label: "Trace", value: "trace" },
-            { label: "Debug", value: "debug" },
-            { label: "Performance", value: "perf" },
-            { label: "Info", value: "info" },
-            { label: "Warn", value: "warn" },
-            { label: "Error", value: "error" },
-        ],
-        hidden: true
-    },
-    biomeDetectorLoggingLevel: {
-        type: OptionType.SELECT,
-        description: "Biome detector logging level",
-        default: "info",
-        options: [
-            { label: "Verbose", value: "verbose" },
-            { label: "Trace", value: "trace" },
-            { label: "Debug", value: "debug" },
-            { label: "Performance", value: "perf" },
-            { label: "Info", value: "info" },
-            { label: "Warn", value: "warn" },
-            { label: "Error", value: "error" },
-        ],
-        hidden: true
-    },
-    _dev_verification_fail_fallback_delay_ms: {
-        type: OptionType.NUMBER,
-        description: "If verification after joining fails, wait this many milliseconds before executing the safety action.",
-        default: 5000,
-        hidden: true
-    },
-    _triggers: {
-        type: OptionType.CUSTOM,
-        default: {} as Record<string, TriggerSetting>,
-        hidden: true,
-        // onChange: initTriggers // will this cause a loop??
-    },
-
 });
-
-export function initTriggers(logger?: ReturnType<typeof createLogger>) {
-    const log = logger?.inherit("initTriggers");
-    const validKeys = new Set(Object.keys(TriggerDefs));
-
-    // missing triggers
-    for (const key of validKeys) {
-        if (!settings.store._triggers[key]) {
-            log?.info(`+ ADDED NEW TRIGGER "${key}"`);
-            settings.store._triggers[key] = { ...DEFAULT_TRIGGER_SETTING };
-        }
-    }
-
-    // remove stale
-    for (const key in settings.store._triggers) {
-        if (!validKeys.has(key)) {
-            log?.info(`- REMOVED STALE TRIGGER "${key}"`);
-            delete settings.store._triggers[key];
-        }
-    }
-}

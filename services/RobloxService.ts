@@ -8,11 +8,12 @@ import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
 import type { RunningGame } from "@vencord/discord-types";
 import { RunningGameStore } from "@webpack/common";
-import { settings } from "userplugins/sradar/settings";
+
+import { settings } from "../settings";
 
 const logger = new Logger("SolRadar.RobloxService");
 
-const Native = VencordNative.pluginHelpers.SRadar as PluginNative<typeof import("userplugins/sradar/native")>;
+const Native = VencordNative.pluginHelpers.SRadar as PluginNative<typeof import("../native")>;
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 

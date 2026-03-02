@@ -5,8 +5,8 @@
  */
 
 import { React } from "@webpack/common";
-import { settings } from "userplugins/sradar/settings";
 
+import { settings } from "../../../../settings";
 import { Setting } from "./Setting";
 
 // ─── Shared styles ────────────────────────────────────────────────────────────

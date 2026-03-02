@@ -9,10 +9,11 @@ import { Card } from "@components/Card";
 import { Divider } from "@components/Divider";
 import { Logger } from "@utils/Logger";
 import { React, RunningGameStore } from "@webpack/common";
-import { Pill } from "userplugins/sradar/components/Pill";
-import { getRobloxProcess } from "userplugins/sradar/services/RobloxService";
-import { JoinLockStore } from "userplugins/sradar/stores/JoinLockStore";
-import { JoinStore } from "userplugins/sradar/stores/JoinStore";
+
+import { getRobloxProcess } from "../../../../services/RobloxService";
+import { JoinLockStore } from "../../../../stores/JoinLockStore";
+import { JoinStore } from "../../../../stores/JoinStore";
+import { Pill } from "../../../Pill";
 
 const logger = new Logger("SolRadar.Developer");
 

@@ -7,7 +7,8 @@
 import { FormSwitch } from "@components/FormSwitch";
 import { OptionType } from "@utils/types";
 import { React } from "@webpack/common";
-import { settings } from "userplugins/sradar/settings";
+
+import { settings } from "../../../../settings";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

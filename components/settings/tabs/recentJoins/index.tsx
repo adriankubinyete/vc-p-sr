@@ -8,11 +8,11 @@ import { Button } from "@components/Button";
 import { Paragraph } from "@components/Paragraph";
 import { closeAllModals } from "@utils/modal";
 import { NavigationRouter, React, showToast, TextInput, Toasts, useState } from "@webpack/common";
-import { QuickFilterBtn } from "userplugins/sradar/components/buttons/QuickFilterBtn";
-import { PillVariant } from "userplugins/sradar/components/Pill";
-import { JoinLockBanner } from "userplugins/sradar/components/ui/JoinLockBanner";
-import { JoinEntry, JoinStore, JoinTag, useJoinHistory } from "userplugins/sradar/stores/JoinStore";
 
+import { JoinEntry, JoinStore, JoinTag, useJoinHistory } from "../../../../stores/JoinStore";
+import { QuickFilterBtn } from "../../../buttons/QuickFilterBtn";
+import { PillVariant } from "../../../Pill";
+import { JoinLockBanner } from "../../../ui/JoinLockBanner";
 import { DANGER_TAGS, FallbackImage, formatTimeAgo, TagBadge } from "./components";
 import {
     openJoinModal,

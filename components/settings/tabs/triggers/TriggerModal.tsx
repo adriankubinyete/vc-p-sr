@@ -10,7 +10,8 @@ import { Heading } from "@components/Heading";
 import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { findByPropsLazy } from "@webpack";
 import { React, showToast, TextInput, Toasts, useEffect, useState } from "@webpack/common";
-import { settings } from "userplugins/sradar/settings";
+
+import { settings } from "../../../../settings";
 import {
     addTrigger,
     DEFAULT_BIOME,
@@ -21,7 +22,7 @@ import {
     TriggerConditions,
     TriggerType,
     updateTrigger,
-} from "userplugins/sradar/stores/TriggerStore";
+} from "../../../../stores/TriggerStore";
 
 // ─── Discord stores (lazy) ────────────────────────────────────────────────────
 

@@ -25,7 +25,7 @@ import { JoinMetrics, JoinStore } from "./stores/JoinStore";
 import { getActiveTriggers, Trigger, TriggerType } from "./stores/TriggerStore";
 
 const logger = new Logger("SolRadar");
-const Native = VencordNative.pluginHelpers.SRadar as PluginNative<typeof import("./native")>;
+const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("./native")>;
 
 // ─── settings helpers ──────────────────────────────────────────────────────
 

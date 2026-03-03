@@ -13,7 +13,7 @@ import { settings } from "../settings";
 
 const logger = new Logger("SolRadar.RobloxService");
 
-const Native = VencordNative.pluginHelpers.SRadar as PluginNative<typeof import("../native")>;
+const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("../native")>;
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 

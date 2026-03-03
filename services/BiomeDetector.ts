@@ -19,7 +19,7 @@
 import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
 
-const Native = VencordNative.pluginHelpers.SRadar as PluginNative<typeof import("../native")>;
+const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("../native")>;
 const logger = new Logger("SolRadar.BiomeDetector");
 
 // ─── Types ────────────────────────────────────────────────────────────────────

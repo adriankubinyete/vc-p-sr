@@ -23,9 +23,9 @@ const sectionTitle: React.CSSProperties = {
 
 const note = (variant: "default" | "warning" | "danger" = "default"): React.CSSProperties => ({
     color: variant === "default" ? "var(--text-muted)"
-        : variant === "warning" ? "var(--text-warning)"
-            : "var(--text-danger)",
-    background: variant === "default" ? "var(--background-modifier-accent)"
+        : variant === "warning" ? "var(--status-warning)"
+            : "var(--text-feedback-critical)",
+    background: variant === "default" ? "var(--background-mod-subtle)"
         : variant === "warning" ? "hsl(38deg 95% 54% / 10%)"
             : "hsl(359deg 87% 54% / 10%)",
     border: `1px solid ${variant === "default" ? "transparent"
@@ -49,7 +49,7 @@ const noteBaseStyle: React.CSSProperties = {
 
 const warningNote: React.CSSProperties = {
     ...noteBaseStyle,
-    color: "var(--text-warning)",
+    color: "var(--status-warning)",
     background: "hsl(38deg 95% 54% / 10%)",
 };
 

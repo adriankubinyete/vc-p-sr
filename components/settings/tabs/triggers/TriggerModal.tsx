@@ -9,7 +9,7 @@ import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
 import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { findByPropsLazy } from "@webpack";
-import { React, showToast, TextInput, Toasts, useEffect, useState } from "@webpack/common";
+import { React, Select, showToast, TextInput, Toasts, useEffect, useState } from "@webpack/common";
 
 import { settings } from "../../../../settings";
 import {
@@ -53,7 +53,7 @@ const strToArr = (str: string): string[] => str.split(",").map(s => s.trim()).fi
 
 const S = {
     sectionTitle: {
-        color: "var(--text-muted)",
+        color: "var(--control-secondary-text-default)",
         fontSize: 11,
         fontWeight: 700,
         textTransform: "uppercase",
@@ -63,7 +63,7 @@ const S = {
     } as React.CSSProperties,
 
     sectionDescription: {
-        color: "var(--text-default)",
+        color: "var(--text-muted)",
         fontSize: 13,
         margin: "8px 0",
         lineHeight: 1.4,
@@ -76,7 +76,7 @@ const S = {
         gap: 12,
         padding: "10px 14px",
         borderRadius: 8,
-        background: "var(--background-secondary)",
+        background: "var(--background-mod-subtle)",
     } as React.CSSProperties,
 
     rowStacked: {
@@ -85,7 +85,7 @@ const S = {
         gap: 0,
         padding: "10px 14px",
         borderRadius: 8,
-        background: "var(--background-secondary)",
+        background: "var(--background-mod-subtle)",
     } as React.CSSProperties,
 
     rowLeft: {
@@ -97,7 +97,7 @@ const S = {
     } as React.CSSProperties,
 
     label: {
-        color: "var(--text-default)",
+        color: "var(--control-secondary-text-default)",
         fontSize: 14,
         fontWeight: 500,
     } as React.CSSProperties,
@@ -111,7 +111,7 @@ const S = {
 
     select: {
         background: "var(--background-tertiary)",
-        border: "1px solid var(--background-modifier-accent)",
+        border: "1px solid var(--background-mod-subtle)",
         borderRadius: 4,
         color: "var(--text-default)",
         fontSize: 13,
@@ -123,7 +123,7 @@ const S = {
 
     note: {
         color: "var(--text-muted)",
-        background: "var(--background-modifier-accent)",
+        background: "var(--background-mod-subtle)",
         fontSize: 12,
         lineHeight: 1.5,
         padding: "8px 12px",
@@ -132,7 +132,7 @@ const S = {
     } as React.CSSProperties,
 
     noteWarning: {
-        color: "var(--text-warning)",
+        color: "var(--status-warning)",
         background: "hsl(38deg 95% 54% / 10%)",
         border: "1px solid hsl(38deg 95% 54% / 25%)",
         fontSize: 12,
@@ -143,7 +143,7 @@ const S = {
     } as React.CSSProperties,
 
     noteDanger: {
-        color: "var(--text-danger)",
+        color: "var(--text-feedback-critical)",
         background: "hsl(359deg 87% 54% / 10%)",
         border: "1px solid hsl(359deg 87% 54% / 25%)",
         fontSize: 12,
@@ -205,13 +205,17 @@ function SelectField({ label, hint, options, value, onChange }: {
                 <span style={S.label}>{label}</span>
                 {hint && <span style={S.hint}>{hint}</span>}
             </div>
-            <select style={S.select} value={value} onChange={e => onChange(e.target.value)}>
-                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <Select
+                // style={S.select}
+                options={options}
+                select={selected => onChange(selected as string)}
+                isSelected={opt => opt === value}
+                serialize={String}
+                closeOnSelect={true}
+            />
         </div>
     );
 }
-
 // ─── KeywordsInput ────────────────────────────────────────────────────────────
 
 function KeywordsInput({ label, hint, value, onChange, placeholder }: {
@@ -290,7 +294,7 @@ type ResolveState =
 
 const chip = {
     list: { display: "flex", flexWrap: "wrap" as const, gap: 6, marginTop: 8 },
-    chip: { display: "flex", alignItems: "center", gap: 6, padding: "3px 8px 3px 6px", borderRadius: 999, background: "var(--background-modifier-accent)", fontSize: 13 },
+    chip: { display: "flex", alignItems: "center", gap: 6, padding: "3px 8px 3px 6px", borderRadius: 999, background: "var(--background-mod-strong)", fontSize: 13 },
     avatar: { width: 20, height: 20, borderRadius: "50%", objectFit: "cover" as const, flexShrink: 0 },
     initial: { width: 20, height: 20, borderRadius: "50%", background: "var(--brand-500)", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
     remove: { background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "0 0 0 4px", fontSize: 16, lineHeight: 1 },

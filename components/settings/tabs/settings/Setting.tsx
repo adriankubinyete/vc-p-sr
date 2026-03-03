@@ -6,7 +6,7 @@
 
 import { FormSwitch } from "@components/FormSwitch";
 import { OptionType } from "@utils/types";
-import { React } from "@webpack/common";
+import { React, Select, TextInput } from "@webpack/common";
 
 import { settings } from "../../../../settings";
 
@@ -32,7 +32,7 @@ const S = {
         gap: 12,
         padding: "10px 14px",
         borderRadius: 8,
-        background: "var(--background-secondary)",
+        background: "var(--background-mod-subtle)",
     } as React.CSSProperties,
 
     rowStacked: {
@@ -42,7 +42,7 @@ const S = {
         gap: 0,
         padding: "10px 14px",
         borderRadius: 8,
-        background: "var(--background-secondary)",
+        background: "var(--background-mod-subtle)",
     } as React.CSSProperties,
 
     rowLeft: {
@@ -73,7 +73,7 @@ const S = {
     restartBadge: {
         fontSize: 10,
         fontWeight: 600,
-        color: "var(--text-warning)",
+        color: "var(--status-warning)",
         background: "hsl(38deg 95% 54% / 15%)",
         border: "1px solid hsl(38deg 95% 54% / 30%)",
         borderRadius: 4,
@@ -91,8 +91,8 @@ const S = {
     } as React.CSSProperties,
 
     select: {
-        background: "var(--background-tertiary)",
-        border: "1px solid var(--background-modifier-accent)",
+        background: "var(--background-mod-subtle)",
+        border: "1px solid var(--background-mod-subtle)",
         borderRadius: 4,
         color: "var(--control-secondary-text-default)",
         fontSize: 13,
@@ -103,8 +103,8 @@ const S = {
     } as React.CSSProperties,
 
     input: {
-        background: "var(--background-tertiary)",
-        border: "1px solid var(--background-modifier-accent)",
+        background: "var(--background-mod-strong)",
+        border: "1px solid var(--background-mod-normal)",
         borderRadius: 4,
         color: "var(--control-secondary-text-default)",
         fontSize: 13,
@@ -140,23 +140,31 @@ function BooleanControl({ id, disabled }: { id: SettingsKey; disabled?: boolean;
     );
 }
 
-function SelectControl({ id, disabled }: { id: SettingsKey; disabled?: boolean; }) {
-    const def = settings.def[id] as any;
-    const value = settings.use([id])[id];
-    const options: { label: string; value: any; }[] = def.options ?? [];
+function SelectControl({ id, disabled }: { id: SettingsKey; disabled?: boolean }) {
+  const def = settings.def[id] as any;
+  const value = settings.use([id])[id];
+  const options = def.options ?? [];
 
-    return (
-        <select
-            style={S.select}
-            value={value as string}
-            disabled={disabled}
-            onChange={e => (s()[id] = e.target.value)}
-        >
-            {options.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-        </select>
-    );
+  const handleChange = (selectedValue: any) => {
+    s()[id] = selectedValue;
+  };
+
+  const isSelected = (optionValue: any) => {
+    return optionValue === value;
+  };
+
+  return (
+    <Select
+      placeholder={def.placeholder ?? "Select an option"}
+      options={options}
+      maxVisibleItems={5}
+      closeOnSelect={true}
+      select={handleChange}
+      isSelected={isSelected}
+      serialize={v => String(v)}
+      {...def.componentProps}
+    />
+  );
 }
 
 function StringControl({ id, disabled }: { id: SettingsKey; disabled?: boolean; }) {
@@ -176,13 +184,13 @@ function StringControl({ id, disabled }: { id: SettingsKey; disabled?: boolean; 
     }, [raw]);
 
     return (
-        <input
+        <TextInput
             type="text"
-            style={S.input}
+            style={{ marginTop: 4 }}
             value={raw}
             disabled={disabled}
             placeholder={disabled ? "" : "Enter value..."}
-            onChange={e => setRaw(e.target.value)}
+            onChange={v => setRaw(v)}
             onBlur={() => commit(raw)}
         />
     );
@@ -215,7 +223,7 @@ function NumberControl({ id, disabled }: { id: SettingsKey; disabled?: boolean; 
         <>
             <input
                 type="number"
-                style={{ ...S.input, borderColor: errMsg ? "var(--text-danger)" : undefined }}
+                style={{ ...S.input, borderColor: errMsg ? "var(--control-critical-primary-text-default)" : undefined }}
                 value={raw}
                 disabled={disabled}
                 min={def.min}

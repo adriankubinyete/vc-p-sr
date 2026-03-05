@@ -359,7 +359,7 @@ function tryNotify({ trigger, channel, guild, joined, safe }: { trigger: Trigger
     }
 
     showNotification({
-        title: joined ? `🎯 SoRa :: Sniped — ${trigger.name}"${trigger.name}"!` : `✅ SoRa :: Matched — ${trigger.name}!`,
+        title: joined ? `🎯 SoRa :: Sniped — ${trigger.name}!` : `✅ SoRa :: Matched — ${trigger.name}!`,
         body: `In: "${channel.name}" ("${guild.name}")`,
         icon: trigger.iconUrl,
     });

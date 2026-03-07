@@ -410,6 +410,58 @@ const QUICK_FILTERS: { type: TriggerType | "all"; label: string; variant: PillVa
     { type: "CUSTOM", label: "Custom", variant: "muted" },
 ];
 
+
+export function CollapsibleTip({ children, title = "Tips", emoji }: {
+    children: React.ReactNode;
+    title?: string;
+    emoji?: string;
+}) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div style={{ marginBottom: 6 }}>
+            <button
+                onClick={() => setOpen(v => !v)}
+                style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: "2px 0",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    color: "var(--text-muted)",
+                    fontSize: 12,
+                    userSelect: "none",
+                }}
+            >
+                <span style={{
+                    display: "inline-block",
+                    transition: "transform 150ms ease",
+                    transform: open ? "rotate(90deg)" : "rotate(0deg)",
+                    fontSize: 10,
+                }}>▶</span>
+                {emoji && <span style={{ fontSize: 13 }}>{emoji}</span>}
+                {title}
+            </button>
+
+            {open && (
+                <div style={{
+                    marginTop: 6,
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    background: "var(--background-mod-subtle)",
+                    fontSize: 12,
+                    color: "var(--text-muted)",
+                    lineHeight: 1.6,
+                }}>
+                    {children}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export function TriggersTab() {
     const triggers = useTriggers();
     const importRef = useRef<HTMLInputElement>(null);
@@ -525,6 +577,7 @@ export function TriggersTab() {
                 }
             </div>
 
+            <CollapsibleTip title="Tips">Left click on a trigger to edit it. Right click to toggle between enabled/disabled. Hold Shift to show delete button.</CollapsibleTip>
             {/* Toolbar */}
             <div style={s.toolbar}>
                 <Paragraph>

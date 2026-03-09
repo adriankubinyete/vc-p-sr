@@ -7,6 +7,7 @@
 import { Channel, Guild, Message } from "@vencord/discord-types";
 import { UserStore } from "@webpack/common";
 
+import { buildJoinUri } from "../services/RobloxService";
 import { SnipeMetrics, SnipeStore, SnipeTag } from "../stores/SnipeStore";
 import { RobloxLink, Trigger } from "../types";
 
@@ -62,6 +63,7 @@ export class Snipe {
             guildName: guild.name,
             messageJumpUrl: `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}`,
             originalContent: link.link,
+            joinUri: buildJoinUri(link),
         });
 
         return new Snipe(id, trigger, channel, guild, link, tMessageReceived);
@@ -72,6 +74,11 @@ export class Snipe {
     markAsLinkSafe() { this._tag("link-verified-safe"); }
     markAsLinkUnsafe() { this._tag("link-verified-unsafe"); }
     markAsLinkNotVerified() { this._tag("link-not-verified"); }
+
+    isSafe(): boolean {
+        const tags = SnipeStore.getById(this.id)?.tags ?? [];
+        return tags.includes("link-verified-safe");
+    }
 
     // ── Biome ─────────────────────────────────────────────────────────────────
 

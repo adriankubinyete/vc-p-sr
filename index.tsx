@@ -10,7 +10,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { PluginNative } from "@utils/types";
 import { Channel, Guild, Message } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
-import { ChannelStore, GuildStore, UserStore } from "@webpack/common";
+import { ChannelStore, GuildStore } from "@webpack/common";
 import { PropsWithChildren } from "react";
 
 import { SolsRadarChatBarButton } from "./components/buttons/SolsRadarChatBarButton";
@@ -18,23 +18,16 @@ import { SolsRadarTitleBarButton } from "./components/buttons/SolsRadarTitleBarB
 import { SolsRadarIcon } from "./components/ui/SolsRadarIcon";
 import { Snipe } from "./models/Snipe";
 import { BiomeDetector } from "./services/BiomeDetector";
-import { buildJoinUri, closeGameIfNeeded, extractServerLink, getPlaceId, joinSolsPublicServer, RobloxLink, stripRobloxLinks } from "./services/RobloxService";
+import { closeGameIfNeeded, extractServerLink, getPlaceId, joinSolsPublicServer, RobloxLink, stripRobloxLinks } from "./services/RobloxService";
 import { getMatchingTrigger } from "./services/TriggerMatcher";
 import { settings } from "./settings";
 import { JoinLockStore } from "./stores/JoinLockStore";
 import { SnipeMetrics, SnipeStore } from "./stores/SnipeStore";
 import { getActiveTriggers, Trigger, TriggerType } from "./stores/TriggerStore";
+import { parseCsv } from "./utils";
 
 const logger = new Logger("SolRadar");
 const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("./native")>;
-
-// ─── settings helpers ──────────────────────────────────────────────────────
-
-/** CSV "123,456,789" → Set<string> */
-function parseCsv(csv: string | undefined): Set<string> {
-    if (!csv?.trim()) return new Set();
-    return new Set(csv.split(",").map(s => s.trim()).filter(Boolean));
-}
 
 // ─── pre processing ────────────────────────────────────────────────────────
 
@@ -133,14 +126,7 @@ async function executeBadLinkAction(): Promise<void> {
     }
 }
 
-async function verifyLink(link: RobloxLink, trigger: Trigger, log: Logger): Promise<boolean | undefined> {
-    if (trigger.conditions.bypassLinkVerification) {
-        log.debug(`[${trigger.name}] Link verification bypassed.`);
-        return undefined;
-    }
-
-    const mode = settings.store.linkVerification as "disabled" | "before" | "after" | undefined ?? "disabled";
-    if (mode === "disabled") return undefined;
+async function verifyLink(link: RobloxLink, log: Logger): Promise<boolean | undefined> {
 
     if (!settings.store.robloxToken) {
         log.warn("Link verification enabled but robloxToken is missing.");
@@ -152,77 +138,19 @@ async function verifyLink(link: RobloxLink, trigger: Trigger, log: Logger): Prom
         return false;
     }
 
-    log.debug(`[${trigger.name}] Verifying link ${JSON.stringify(link)}`);
+    log.debug(`Verifying link ${JSON.stringify(link)}`);
     const placeId = await getPlaceId(link);
     const allowedPlaceIds = parseCsv(settings.store.allowedPlaceIds);
 
     if (allowedPlaceIds.size === 0 || allowedPlaceIds.has(String(placeId))) {
-        log.debug(`[${trigger.name}] Place ID ${placeId} is allowed.`);
+        log.debug(`Place ID ${placeId} is allowed.`);
         return true;
     }
 
-    if (placeId === null) log.warn(`[${trigger.name}] Failed to resolve link: ${link.code}`);
+    if (placeId === null) log.warn(`Failed to resolve link: ${link.code}`);
 
     await executeBadLinkAction();
     return false;
-}
-
-async function tryJoin(
-    link: RobloxLink,
-    trigger: Trigger,
-    log: Logger,
-    tMessageReceived: number
-): Promise<JoinResult> {
-    const noJoin: JoinResult = { joined: false, metrics: null, linkSafe: undefined };
-
-    if (!settings.store.autoJoinEnabled) {
-        log.debug(`[${trigger.name}] Auto-join globally disabled.`);
-        return noJoin;
-    }
-    if (!trigger.state.autojoin) {
-        log.debug(`[${trigger.name}] Auto-join disabled on this trigger.`);
-        return noJoin;
-    }
-
-    if ((settings.store.linkVerification as string) === "before") {
-        const safe = await verifyLink(link, trigger, log);
-        if (safe === false) {
-            log.warn(`[${trigger.name}] Link flagged as unsafe — aborting join.`);
-            return { joined: false, metrics: null, linkSafe: false };
-        }
-    }
-
-    const uri = buildJoinUri(link);
-    log.info(`[${trigger.name}] Joining: ${uri}`);
-
-    const tJoinStart = performance.now();
-    try {
-        await closeGameIfNeeded();
-        await Native.openUri(uri);
-    } catch (err) {
-        log.error(`[${trigger.name}] openUri failed: ${(err as Error).message}`);
-        return noJoin;
-    }
-    const tJoinEnd = performance.now();
-
-    const joinDurationMs = tJoinEnd - tJoinStart;
-    const timeToJoinMs = tJoinEnd - tMessageReceived;
-    const overheadMs = timeToJoinMs - joinDurationMs;
-
-    const metrics: SnipeMetrics = { timeToJoinMs, joinDurationMs, overheadMs };
-    log.info(
-        `[${trigger.name}] Join complete — ` +
-        `total: ${timeToJoinMs.toFixed(1)}ms | ` +
-        `openUri: ${joinDurationMs.toFixed(1)}ms | ` +
-        `overhead: ${overheadMs.toFixed(1)}ms`
-    );
-
-    let linkSafe: boolean | undefined = undefined;
-    if ((settings.store.linkVerification as string) === "after") {
-        linkSafe = await verifyLink(link, trigger, log);
-    }
-
-    return { joined: true, metrics, linkSafe };
 }
 
 // ─── post-join ─────────────────────────────────────────────────────────────────
@@ -338,90 +266,6 @@ function _waitForBiomeEnd(snipe: Snipe, log: Logger): void {
     });
 }
 
-function tryNotify({ trigger, channel, guild, joined, safe }: { trigger: Trigger; channel: Channel; guild: Guild; joined: boolean; safe: boolean | undefined; }, log: Logger): void {
-    if (!settings.store.notificationEnabled) {
-        log.debug(`[${trigger.name}] Notifications globally disabled.`);
-        return;
-    }
-    if (!trigger.state.notify) {
-        log.debug(`[${trigger.name}] Notifications disabled on this trigger.`);
-        return;
-    }
-
-    if (safe === false && joined) {
-        showNotification({
-            title: `⚠️ SoRa :: ${trigger.name} :: Unsafe link!`,
-            body: `In: "${channel.name}" ("${guild.name}")`,
-            icon: trigger.iconUrl,
-        });
-        return;
-    }
-
-    showNotification({
-        title: joined ? `🎯 SoRa :: Sniped — ${trigger.name}!` : `✅ SoRa :: Matched — ${trigger.name}!`,
-        body: `In: "${channel.name}" ("${guild.name}")`,
-        icon: trigger.iconUrl,
-    });
-
-    log.info(`[${trigger.name}] Notify: matched in #${channel.name} @ ${guild.name}.`);
-}
-
-// ─── SnipeStore integration ────────────────────────────────────────────────────
-
-/**
- * Cria uma entrada no SnipeStore assim que o match é confirmado,
- * antes do join acontecer — para que o histórico capture até os casos
- * onde autojoin está desativado.
- * Retorna o joinId para que as tags possam ser adicionadas progressivamente.
- */
-function createJoinRecord(
-    message: Message,
-    link: RobloxLink,
-    trigger: Trigger,
-    channel: Channel,
-    guild: Guild
-): number {
-    const author = UserStore.getUser(message.author.id);
-
-    return SnipeStore.add({
-        triggerName: trigger.name,
-        triggerType: trigger.type,
-        triggerPriority: trigger.state.priority,
-        iconUrl: trigger.iconUrl,
-        authorName: message.author.username,
-        authorAvatarUrl: author?.getAvatarURL?.() ?? undefined,
-        authorId: message.author.id,
-        channelName: channel.name,
-        guildName: guild.name,
-        messageJumpUrl: `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}`,
-        originalContent: link.link, // o link original, antes do sanitize
-    });
-}
-
-/**
- * Resolve as tags finais baseado no resultado do join e na verificação de link.
- * Chamado após tryJoin retornar.
- */
-function finalizeJoinRecord(
-    joinId: number,
-    result: JoinResult,
-    log: Logger
-): void {
-    if (!result.joined) {
-        SnipeStore.addTags(joinId, result.linkSafe === false ? "link-verified-unsafe" : "failed");
-        return;
-    }
-
-    // join aconteceu — salva métricas e resolve tags de link
-    SnipeStore.update(joinId, { metrics: result.metrics ?? undefined });
-
-    if (result.linkSafe === true) SnipeStore.addTags(joinId, "link-verified-safe");
-    else if (result.linkSafe === false) SnipeStore.addTags(joinId, "link-verified-unsafe");
-    else SnipeStore.addTags(joinId, "link-not-verified");
-
-    log.debug(`Join record ${joinId} finalized.`);
-}
-
 // Active biome detection cancel function — cancels previous detection when a new join happens
 let _cancelBiomeDetection: (() => void) | null = null;
 
@@ -437,24 +281,43 @@ function shouldJoin(snipe: Snipe): boolean {
     return true;
 }
 
-async function join(snipe: Snipe, log: Logger): Promise<void> {
-    if (settings.store.linkVerification === "before") {
-        console.log("bla");
+async function verifySnipeSafety(snipe: Snipe, log: Logger): Promise<void> {
+    if (snipe.trigger.conditions.bypassLinkVerification) return;
+    if (settings.store.linkVerification === "disabled") return;
+    const safe = await verifyLink(snipe.link, log);
+
+    if (safe === true) {
+        snipe.markAsLinkSafe();
+    } else if (safe === false) {
+        snipe.markAsLinkUnsafe();
+    } else {
+        snipe.markAsLinkNotVerified();
     }
 
-    const uri = buildJoinUri(snipe.link);
-    const metrics = await joinServer(uri, snipe.tMessageReceived, log);
+}
 
-    if (!metrics) {
+async function join(snipe: Snipe, log: Logger): Promise<void> {
+    if (settings.store.linkVerification === "before") {
+        await verifySnipeSafety(snipe, log);
+        if (!snipe.isSafe()) return;
+    }
+
+    const uri = snipe.getJoinUri();
+    if (!uri) {
         snipe.markAsFailed();
         return;
     }
 
-    snipe.setJoinUri(uri);
+    const metrics = await joinServer(uri, snipe.tMessageReceived, log);
+    if (!metrics) {
+        snipe.markAsFailed();
+        return;
+    }
     snipe.setMetrics(metrics);
 
     if (settings.store.linkVerification === "after") {
-        console.log("bla");
+        await verifySnipeSafety(snipe, log);
+        if (!snipe.isSafe()) return;
     }
 
     activateJoinLock(snipe.trigger, log);

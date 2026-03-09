@@ -10,8 +10,8 @@ import { Heading } from "@components/Heading";
 import { copyToClipboard } from "@utils/clipboard";
 import { closeAllModals, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "@utils/modal";
 import { NavigationRouter, React, showToast, Toasts } from "@webpack/common";
-import { joinUri } from "userplugins/solsradar/services/RobloxService";
 
+import { joinUri } from "../../../../services/RobloxService";
 import { SnipeEntry, SnipeStore } from "../../../../stores/SnipeStore";
 import { FallbackImage, formatTimeAgo, TagBadge } from "./components";
 

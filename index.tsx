@@ -18,7 +18,7 @@ import { SolsRadarTitleBarButton } from "./components/buttons/SolsRadarTitleBarB
 import { SolsRadarIcon } from "./components/ui/SolsRadarIcon";
 import { Snipe } from "./models/Snipe";
 import { BiomeDetector } from "./services/BiomeDetector";
-import { closeGameIfNeeded, extractServerLink, getPlaceId, joinSolsPublicServer, RobloxLink, stripRobloxLinks } from "./services/RobloxService";
+import { closeGameIfNeeded, extractServerLink, getPlaceId, joinSolsPublicServer, joinUri, RobloxLink, stripRobloxLinks } from "./services/RobloxService";
 import { getMatchingTrigger } from "./services/TriggerMatcher";
 import { settings } from "./settings";
 import { JoinLockStore } from "./stores/JoinLockStore";
@@ -359,7 +359,7 @@ function notify(snipe: Snipe, log: Logger): void {
     const entry = SnipeStore.getById(snipe.id)!;
     const tags = new Set(entry.tags);
     const onClick = entry.joinUri
-        ? () => Native.openUri(entry.joinUri!)
+        ? () => joinUri(entry.joinUri)
         : undefined;
 
     if (tags.has("link-verified-unsafe")) {

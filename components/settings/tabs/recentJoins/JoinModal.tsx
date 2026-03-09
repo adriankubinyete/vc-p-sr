@@ -10,8 +10,9 @@ import { Heading } from "@components/Heading";
 import { copyToClipboard } from "@utils/clipboard";
 import { closeAllModals, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "@utils/modal";
 import { NavigationRouter, React, showToast, Toasts } from "@webpack/common";
+import { joinUri } from "userplugins/solsradar/services/RobloxService";
 
-import { JoinEntry, JoinStore } from "../../../../stores/JoinStore";
+import { SnipeEntry, SnipeStore } from "../../../../stores/SnipeStore";
 import { FallbackImage, formatTimeAgo, TagBadge } from "./components";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ export function DetailRow({ label, value }: { label: string; value: React.ReactN
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
 function JoinModal({ entry, modalProps }: {
-    entry: JoinEntry;
+    entry: SnipeEntry;
     modalProps: ModalProps;
 }) {
     const jumpToMessage = () => {
@@ -38,6 +39,16 @@ function JoinModal({ entry, modalProps }: {
             closeAllModals();
         } catch {
             showToast("Failed to navigate to message.", Toasts.Type.FAILURE);
+        }
+    };
+
+    const joinServer = () => {
+        if (!entry.joinUri) return showToast("No join link detected.", Toasts.Type.FAILURE);
+        try {
+            joinUri(entry.joinUri);
+            closeAllModals();
+        } catch {
+            showToast("Failed to join server.", Toasts.Type.FAILURE);
         }
     };
 
@@ -100,8 +111,8 @@ function JoinModal({ entry, modalProps }: {
 
             <ModalFooter>
                 <div style={{ display: "flex", gap: 8, width: "100%" }}>
-                    {entry.messageJumpUrl && (
-                        <Button variant="primary" size="small" onClick={jumpToMessage}>Jump to message</Button>
+                    {entry.joinUri && (
+                        <Button variant="positive" size="small" onClick={joinServer}>Join</Button>
                     )}
                     {entry.originalContent && (
                         <Button variant="primary" size="small" onClick={() => {
@@ -111,10 +122,13 @@ function JoinModal({ entry, modalProps }: {
                             Copy link
                         </Button>
                     )}
+                    {entry.messageJumpUrl && (
+                        <Button variant="primary" size="small" onClick={jumpToMessage}>Go to message</Button>
+                    )}
                     <Button
                         size="small"
                         variant="dangerPrimary"
-                        onClick={() => { JoinStore.delete(entry.id); modalProps.onClose(); }}
+                        onClick={() => { SnipeStore.delete(entry.id); modalProps.onClose(); }}
                         style={{ marginLeft: "auto" }}
                     >
                         Delete
@@ -127,6 +141,6 @@ function JoinModal({ entry, modalProps }: {
 
 // ─── Entrypoint ───────────────────────────────────────────────────────────────
 
-export function openJoinModal(entry: JoinEntry, onCloseAll?: () => void): void {
+export function openJoinModal(entry: SnipeEntry, onCloseAll?: () => void): void {
     openModal(p => <JoinModal entry={entry} modalProps={p} />);
 }

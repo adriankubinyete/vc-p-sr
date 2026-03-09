@@ -9,7 +9,7 @@ import { Paragraph } from "@components/Paragraph";
 import { closeAllModals } from "@utils/modal";
 import { NavigationRouter, React, showToast, TextInput, Toasts, useState } from "@webpack/common";
 
-import { JoinEntry, JoinStore, JoinTag, useJoinHistory } from "../../../../stores/JoinStore";
+import { SnipeEntry, SnipeStore, SnipeTag, useSnipeHistory } from "../../../../stores/SnipeStore";
 import { QuickFilterBtn } from "../../../buttons/QuickFilterBtn";
 import { PillVariant } from "../../../Pill";
 import { JoinLockBanner } from "../../../ui/JoinLockBanner";
@@ -20,7 +20,7 @@ import {
 
 // ─── Card styling ─────────────────────────────────────────────────────────────
 
-function cardBorderColor(entry: JoinEntry): string {
+function cardBorderColor(entry: SnipeEntry): string {
     // new
     // if (entry.tags.some(t => DANGER_TAGS.has(t))) return "color-mix(in srgb, var(--red-400) 35%, transparent)";
     // if (entry.tags.includes("biome-verified-real")) return "color-mix(in srgb, var(--green-360) 35%, transparent)";
@@ -32,7 +32,7 @@ function cardBorderColor(entry: JoinEntry): string {
     return "rgba(255, 255, 255, 0.1)";
 }
 
-function cardBg(entry: JoinEntry): string {
+function cardBg(entry: SnipeEntry): string {
     // new style
     // if (entry.tags.some(t => DANGER_TAGS.has(t))) return "color-mix(in srgb, var(--red-400) 5%, var(--background-secondary))";
     // if (entry.tags.includes("biome-verified-real")) return "color-mix(in srgb, var(--green-360) 5%, var(--background-secondary))";
@@ -47,7 +47,7 @@ function cardBg(entry: JoinEntry): string {
 // ─── JoinCard ─────────────────────────────────────────────────────────────────
 
 function JoinCard({ entry, onClick, onContextMenu }: {
-    entry: JoinEntry;
+    entry: SnipeEntry;
     onClick: () => void;
     onContextMenu: () => void;
 }) {
@@ -131,7 +131,7 @@ function JoinCard({ entry, onClick, onContextMenu }: {
 
 // ─── RecentJoinsTab ───────────────────────────────────────────────────────────
 
-const FILTER_OPTIONS: { tagName: JoinTag | "all"; label: string; variant: PillVariant; }[] = [
+const FILTER_OPTIONS: { tagName: SnipeTag | "all"; label: string; variant: PillVariant; }[] = [
     { tagName: "all", label: "All", variant: "brand" },
     { tagName: "biome-verified-real", label: "Biome Real", variant: "green" },
     { tagName: "biome-verified-bait", label: "Biome Bait", variant: "red" },
@@ -141,14 +141,14 @@ const FILTER_OPTIONS: { tagName: JoinTag | "all"; label: string; variant: PillVa
 ];
 
 export function RecentJoinsTab() {
-    const entries = useJoinHistory();
+    const entries = useSnipeHistory();
     const [search, setSearch] = useState("");
-    const [filter, setFilter] = useState("all" as JoinTag | "all");
+    const [filter, setFilter] = useState("all" as SnipeTag | "all");
 
     const filtered = React.useMemo(() => {
         let result = entries;
         if (filter !== "all") {
-            result = result.filter(e => e.tags.includes(filter as JoinTag));
+            result = result.filter(e => e.tags.includes(filter as SnipeTag));
         }
         if (search.trim()) {
             const q = search.toLowerCase();
@@ -162,7 +162,7 @@ export function RecentJoinsTab() {
         return result;
     }, [entries, filter, search]);
 
-    const jumpToMessage = (entry: JoinEntry) => {
+    const jumpToMessage = (entry: SnipeEntry) => {
         if (!entry.messageJumpUrl) return;
         try {
             NavigationRouter.transitionTo(new URL(entry.messageJumpUrl).pathname);
@@ -233,7 +233,7 @@ export function RecentJoinsTab() {
                 </Paragraph>
                 <div style={{ display: "flex", gap: 4 }}>
                     {entries.length > 0 && (
-                        <Button variant="dangerPrimary" size="small" onClick={() => JoinStore.clear()}>
+                        <Button variant="dangerPrimary" size="small" onClick={() => SnipeStore.clear()}>
                             Clear all
                         </Button>
                     )}

@@ -179,3 +179,9 @@ export async function joinLink(link: RobloxLink): Promise<void> {
     await closeGameIfNeeded();
     return await Native.openUri(buildJoinUri(link));
 }
+
+
+export async function joinUri(uri: string): Promise<void> {
+    await closeGameIfNeeded();
+    return await Native.openUri(uri);
+}

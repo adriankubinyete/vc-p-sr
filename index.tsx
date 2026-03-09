@@ -16,12 +16,13 @@ import { PropsWithChildren } from "react";
 import { SolsRadarChatBarButton } from "./components/buttons/SolsRadarChatBarButton";
 import { SolsRadarTitleBarButton } from "./components/buttons/SolsRadarTitleBarButton";
 import { SolsRadarIcon } from "./components/ui/SolsRadarIcon";
+import { Snipe } from "./models/Snipe";
 import { BiomeDetector } from "./services/BiomeDetector";
 import { buildJoinUri, closeGameIfNeeded, extractServerLink, getPlaceId, joinSolsPublicServer, RobloxLink, stripRobloxLinks } from "./services/RobloxService";
 import { getMatchingTrigger } from "./services/TriggerMatcher";
 import { settings } from "./settings";
 import { JoinLockStore } from "./stores/JoinLockStore";
-import { JoinMetrics, JoinStore } from "./stores/JoinStore";
+import { SnipeMetrics, SnipeStore } from "./stores/SnipeStore";
 import { getActiveTriggers, Trigger, TriggerType } from "./stores/TriggerStore";
 
 const logger = new Logger("SolRadar");
@@ -120,7 +121,7 @@ function isMessageAllowed({ channel, message, trigger }: { channel: Channel; mes
 
 export interface JoinResult {
     joined: boolean;
-    metrics: JoinMetrics | null;
+    metrics: SnipeMetrics | null;
     linkSafe: boolean | undefined;
 }
 
@@ -208,7 +209,7 @@ async function tryJoin(
     const timeToJoinMs = tJoinEnd - tMessageReceived;
     const overheadMs = timeToJoinMs - joinDurationMs;
 
-    const metrics: JoinMetrics = { timeToJoinMs, joinDurationMs, overheadMs };
+    const metrics: SnipeMetrics = { timeToJoinMs, joinDurationMs, overheadMs };
     log.info(
         `[${trigger.name}] Join complete — ` +
         `total: ${timeToJoinMs.toFixed(1)}ms | ` +
@@ -255,29 +256,27 @@ function activateJoinLock(trigger: Trigger, log: Logger): void {
  * O cancel() é retornado para que o chamador possa cancelar se um novo join acontecer.
  */
 function startBiomeDetection(
-    trigger: Trigger,
-    joinId: number,
+    snipe: Snipe,
     log: Logger,
 ): (() => void) | null {
-    if (!trigger.biome?.detectionEnabled) {
-        JoinStore.addTags(joinId, "biome-not-verified");
+    if (!snipe.trigger.biome?.detectionEnabled) {
+        snipe.markAsBiomeNotVerified();
         return null;
     }
 
-    if (!BIOME_DETECTABLE_TYPES.has(trigger.type)) {
-        JoinStore.addTags(joinId, "biome-not-verified");
+    if (!BIOME_DETECTABLE_TYPES.has(snipe.trigger.type)) {
         return null;
     }
 
     if (!settings.store.detectorEnabled) {
-        log.debug(`[${trigger.name}] Biome detector globally disabled.`);
-        JoinStore.addTags(joinId, "biome-not-verified");
+        log.debug(`[${snipe.trigger.name}] Biome detector globally disabled.`);
+        snipe.markAsBiomeNotVerified();
         return null;
     }
 
-    const expectedBiome = trigger.biome.detectionKeyword || trigger.name;
+    const expectedBiome = snipe.trigger.biome.detectionKeyword || snipe.trigger.name;
     const startDelayMs = settings.store.closeGameBeforeJoin ? 6_000 : 0;
-    log.info(`[${trigger.name}] Awaiting biome detection — expecting "${expectedBiome}" (delay: ${startDelayMs}ms).`);
+    log.info(`[${snipe.trigger.name}] Awaiting biome detection — expecting "${expectedBiome}" (delay: ${startDelayMs}ms).`);
 
     const { promise, cancel } = BiomeDetector.waitForBiome(
         expectedBiome,
@@ -289,40 +288,40 @@ function startBiomeDetection(
 
     promise.then(verdict => {
         const elapsed = Math.round(performance.now() - t0);
-        log.info(`[${trigger.name}] Biome verdict: ${verdict.result} (${elapsed}ms)`);
+        log.info(`[${snipe.trigger.name}] Biome verdict: ${verdict.result} (${elapsed}ms)`);
 
         switch (verdict.result) {
             case "real":
-                JoinStore.addTags(joinId, "biome-verified-real");
-                _waitForBiomeEnd(trigger, log);
+                snipe.markAsBiomeReal();
+                _waitForBiomeEnd(snipe, log);
                 showNotification({
-                    title: `✅ SoRa :: Real — ${trigger.name}`,
+                    title: `✅ SoRa :: Real — ${snipe.trigger.name}`,
                     body: `Detected in ${elapsed}ms`,
-                    icon: trigger.iconUrl,
+                    icon: snipe.trigger.iconUrl,
                 });
                 break;
 
             case "bait":
-                JoinStore.addTags(joinId, "biome-verified-bait");
+                snipe.markAsBiomeBait();
                 if (JoinLockStore.isLocked) {
-                    log.warn(`[${trigger.name}] Bait detected — releasing join lock.`);
+                    log.warn(`[${snipe.trigger.name}] Bait detected — releasing join lock.`);
                     JoinLockStore.release();
                 }
                 showNotification({
-                    title: `❌ SoRa :: Fake — ${trigger.name}`,
+                    title: `❌ SoRa :: Fake — ${snipe.trigger.name}`,
                     body: `Got "${verdict.biome}" instead (${elapsed}ms)`,
-                    icon: trigger.iconUrl,
+                    icon: snipe.trigger.iconUrl,
                 });
                 break;
 
             case "timeout":
-                JoinStore.addTags(joinId, "biome-verified-timeout");
-                log.warn(`[${trigger.name}] Biome detection timed out — releasing join lock.`);
+                snipe.markAsBiomeTimeout();
+                log.warn(`[${snipe.trigger.name}] Biome detection timed out — releasing join lock.`);
                 if (JoinLockStore.isLocked) JoinLockStore.release();
                 showNotification({
-                    title: `⏱ SoRa :: Timeout — ${trigger.name}`,
+                    title: `⏱ SoRa :: Timeout — ${snipe.trigger.name}`,
                     body: "Biome detection timed out.",
-                    icon: trigger.iconUrl,
+                    icon: snipe.trigger.iconUrl,
                 });
                 break;
         }
@@ -331,10 +330,10 @@ function startBiomeDetection(
     return cancel;
 }
 
-function _waitForBiomeEnd(trigger: Trigger, log: Logger): void {
+function _waitForBiomeEnd(snipe: Snipe, log: Logger): void {
     const { promise } = BiomeDetector.waitForBiome("__never_match__", 1_800_000);
     promise.then(() => {
-        log.info(`[${trigger.name}] Biome ended — releasing join lock.`);
+        log.info(`[${snipe.trigger.name}] Biome ended — releasing join lock.`);
         JoinLockStore.release();
     });
 }
@@ -367,10 +366,10 @@ function tryNotify({ trigger, channel, guild, joined, safe }: { trigger: Trigger
     log.info(`[${trigger.name}] Notify: matched in #${channel.name} @ ${guild.name}.`);
 }
 
-// ─── JoinStore integration ────────────────────────────────────────────────────
+// ─── SnipeStore integration ────────────────────────────────────────────────────
 
 /**
- * Cria uma entrada no JoinStore assim que o match é confirmado,
+ * Cria uma entrada no SnipeStore assim que o match é confirmado,
  * antes do join acontecer — para que o histórico capture até os casos
  * onde autojoin está desativado.
  * Retorna o joinId para que as tags possam ser adicionadas progressivamente.
@@ -384,7 +383,7 @@ function createJoinRecord(
 ): number {
     const author = UserStore.getUser(message.author.id);
 
-    return JoinStore.add({
+    return SnipeStore.add({
         triggerName: trigger.name,
         triggerType: trigger.type,
         triggerPriority: trigger.state.priority,
@@ -409,22 +408,127 @@ function finalizeJoinRecord(
     log: Logger
 ): void {
     if (!result.joined) {
-        JoinStore.addTags(joinId, result.linkSafe === false ? "link-verified-unsafe" : "failed");
+        SnipeStore.addTags(joinId, result.linkSafe === false ? "link-verified-unsafe" : "failed");
         return;
     }
 
     // join aconteceu — salva métricas e resolve tags de link
-    JoinStore.update(joinId, { metrics: result.metrics ?? undefined });
+    SnipeStore.update(joinId, { metrics: result.metrics ?? undefined });
 
-    if (result.linkSafe === true) JoinStore.addTags(joinId, "link-verified-safe");
-    else if (result.linkSafe === false) JoinStore.addTags(joinId, "link-verified-unsafe");
-    else JoinStore.addTags(joinId, "link-not-verified");
+    if (result.linkSafe === true) SnipeStore.addTags(joinId, "link-verified-safe");
+    else if (result.linkSafe === false) SnipeStore.addTags(joinId, "link-verified-unsafe");
+    else SnipeStore.addTags(joinId, "link-not-verified");
 
     log.debug(`Join record ${joinId} finalized.`);
 }
 
 // Active biome detection cancel function — cancels previous detection when a new join happens
 let _cancelBiomeDetection: (() => void) | null = null;
+
+function isJoinLocked(trigger: Trigger) {
+    return JoinLockStore.isBlocked(trigger.state.priority);
+}
+
+// ─── join stuff ────────────────────────────────────────────────────────────────
+
+function shouldJoin(snipe: Snipe): boolean {
+    if (!settings.store.autoJoinEnabled) return false;
+    if (!snipe.trigger.state.autojoin) return false;
+    return true;
+}
+
+async function join(snipe: Snipe, log: Logger): Promise<void> {
+    if (settings.store.linkVerification === "before") {
+        console.log("bla");
+    }
+
+    const uri = buildJoinUri(snipe.link);
+    const metrics = await joinServer(uri, snipe.tMessageReceived, log);
+
+    if (!metrics) {
+        snipe.markAsFailed();
+        return;
+    }
+
+    snipe.setJoinUri(uri);
+    snipe.setMetrics(metrics);
+
+    if (settings.store.linkVerification === "after") {
+        console.log("bla");
+    }
+
+    activateJoinLock(snipe.trigger, log);
+
+    _cancelBiomeDetection?.();
+    _cancelBiomeDetection = startBiomeDetection(snipe, log);
+
+}
+
+async function joinServer(uri: string, tMessageReceived: number, log: Logger): Promise<SnipeMetrics | null> {
+    log.info(`Joining: ${uri}`);
+
+    const tJoinStart = performance.now();
+    try {
+        await closeGameIfNeeded();
+        await Native.openUri(uri);
+    } catch (err) {
+        log.error(`Native.openUri failed: ${(err as Error).message}`);
+        return null;
+    }
+    const tJoinEnd = performance.now();
+
+    const joinDurationMs = tJoinEnd - tJoinStart;
+    const timeToJoinMs = tJoinEnd - tMessageReceived;
+    const overheadMs = timeToJoinMs - joinDurationMs;
+
+    return { timeToJoinMs, joinDurationMs, overheadMs };
+}
+
+// ─── notify stuff ──────────────────────────────────────────────────────────────
+
+function shouldNotify(snipe: Snipe): boolean {
+    if (!settings.store.notificationEnabled) return false;
+    if (!snipe.trigger.state.notify) return false;
+    return true;
+}
+
+function notify(snipe: Snipe, log: Logger): void {
+    const entry = SnipeStore.getById(snipe.id)!;
+    const tags = new Set(entry.tags);
+    const onClick = entry.joinUri
+        ? () => Native.openUri(entry.joinUri!)
+        : undefined;
+
+    if (tags.has("link-verified-unsafe")) {
+        showNotification({
+            title: `⚠️ SoRa :: ${snipe.trigger.name} :: Unsafe link!`,
+            body: `In: "${snipe.channel.name}" ("${snipe.guild.name}")`,
+            icon: snipe.trigger.iconUrl,
+            onClick,
+        });
+        return;
+    }
+
+    if (tags.has("failed")) {
+        showNotification({
+            title: `❌ SoRa :: Failed — ${snipe.trigger.name}`,
+            body: `In: "${snipe.channel.name}" ("${snipe.guild.name}")`,
+            icon: snipe.trigger.iconUrl,
+        });
+        return;
+    }
+
+    showNotification({
+        title: entry.joinUri
+            ? `🎯 SoRa :: Sniped — ${snipe.trigger.name}!`
+            : `✅ SoRa :: Matched — ${snipe.trigger.name}!`,
+        body: `In: "${snipe.channel.name}" ("${snipe.guild.name}")`,
+        icon: snipe.trigger.iconUrl,
+        onClick,
+    });
+
+    log.info(`[${snipe.trigger.name}] Notified: #${snipe.channel.name} @ ${snipe.guild.name}`);
+}
 
 // ─── orchestration ─────────────────────────────────────────────────────────────
 
@@ -444,35 +548,13 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
     log.info(`Match: "${trigger.name}" (p${trigger.state.priority}) — #${channel.name} @ ${guild.name}`);
 
     if (!isMessageAllowed({ channel, message, trigger }, log)) return;
+    if (isJoinLocked(trigger)) return;
 
-    // ── Join lock check ───────────────────────────────────────────────────────
-    if (JoinLockStore.isBlocked(trigger.state.priority)) {
-        const lock = JoinLockStore.current!;
-        log.info(
-            `[${trigger.name}] Blocked by join lock ` +
-            `(lock: "${lock.triggerName}", priority: ${lock.priority}, ` +
-            `expires in ${(JoinLockStore.msRemaining() / 1000).toFixed(1)}s)`
-        );
-        return;
-    }
+    const snipe = Snipe.create(message, link, trigger, channel, guild, tMessageReceived);
 
-    const joinId = createJoinRecord(message, link, trigger, channel, guild);
+    if (shouldJoin(snipe)) await join(snipe, log);
+    if (shouldNotify(snipe)) notify(snipe, log);
 
-    const result = await tryJoin(link, trigger, log, tMessageReceived);
-
-    tryNotify({ trigger, channel, guild, joined: result.joined, safe: result.linkSafe }, log);
-
-    finalizeJoinRecord(joinId, result, log);
-
-    if (!result.joined || result.linkSafe === false) return;
-
-    // ── Activate join lock ────────────────────────────────────────────────────
-    activateJoinLock(trigger, log);
-
-    // ── Biome detection ───────────────────────────────────────────────────────
-    // Cancel any pending detection from a previous join
-    _cancelBiomeDetection?.();
-    _cancelBiomeDetection = startBiomeDetection(trigger, joinId, log);
 }
 
 // ─── plugin ───────────────────────────────────────────────────────────────────

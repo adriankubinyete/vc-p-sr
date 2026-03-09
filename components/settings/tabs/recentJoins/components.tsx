@@ -7,26 +7,26 @@
 import { Logger } from "@utils/Logger";
 import { React, useState } from "@webpack/common";
 
-import { JoinTag, TAG_CONFIGS } from "../../../../stores/JoinStore";
+import { SnipeTag, TAG_CONFIGS } from "../../../../stores/SnipeStore";
 import { Pill, PillVariant } from "../../../Pill";
 
 const logger = new Logger("SolRadar.RecentJoins.components");
 
 export const AVATAR_FALLBACK = "https://discord.com/assets/881ed827548f38c6.svg";
 
-export const SUCCESS_TAGS = new Set<JoinTag>(["link-verified-safe", "biome-verified-real"]);
-export const DANGER_TAGS = new Set<JoinTag>(["link-verified-unsafe", "biome-verified-bait", "failed"]);
-export const WARN_TAGS = new Set<JoinTag>(["biome-verified-timeout", "link-not-verified", "biome-not-verified"]);
+export const SUCCESS_TAGS = new Set<SnipeTag>(["link-verified-safe", "biome-verified-real"]);
+export const DANGER_TAGS = new Set<SnipeTag>(["link-verified-unsafe", "biome-verified-bait", "failed"]);
+export const WARN_TAGS = new Set<SnipeTag>(["biome-verified-timeout", "link-not-verified", "biome-not-verified"]);
 
-/** Maps a JoinTag to a PillVariant. */
-export function tagToPillVariant(tag: JoinTag): PillVariant {
+/** Maps a SnipeTag to a PillVariant. */
+export function tagToPillVariant(tag: SnipeTag): PillVariant {
     if (SUCCESS_TAGS.has(tag)) return "green";
     if (DANGER_TAGS.has(tag)) return "red";
     if (WARN_TAGS.has(tag)) return "yellow";
     return "muted";
 }
 
-export function TagBadge({ tag }: { tag?: JoinTag; }) {
+export function TagBadge({ tag }: { tag?: SnipeTag; }) {
     if (!tag || !TAG_CONFIGS[tag]) {
         logger.warn("TagBadge received invalid tag:", tag);
         return null;

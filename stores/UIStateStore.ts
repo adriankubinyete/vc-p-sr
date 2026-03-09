@@ -6,7 +6,7 @@
 
 import { localStorage } from "@utils/localStorage";
 
-import { JoinTag } from "./JoinStore";
+import { JoinTag } from "./SnipeStore";
 
 const STORAGE_KEY = "vc-sora-ui-state";
 

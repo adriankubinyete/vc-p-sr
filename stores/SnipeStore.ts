@@ -9,12 +9,12 @@ import { React } from "@webpack/common";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = "solsRadar_joinHistory";
+const STORAGE_KEY = "solsRadar_snipeHistory";
 const MAX_ENTRIES = 50;
 
 // ─── Tags ─────────────────────────────────────────────────────────────────────
 
-export type JoinTag =
+export type SnipeTag =
     | "biome-verified-real" // biome confirmado pelo detector
     | "biome-verified-bait" // biome detectado ≠ esperado
     | "biome-verified-timeout" // detector não respondeu a tempo
@@ -25,7 +25,7 @@ export type JoinTag =
     | "failed" // openUri falhou
     | "unknown"; // estado inicial
 
-export interface JoinTagConfig {
+export interface SnipeTagConfig {
     label: string;
     emoji?: string;
     detail?: string;
@@ -33,34 +33,31 @@ export interface JoinTagConfig {
     priority: number;
 }
 
-export const TAG_CONFIGS: Record<JoinTag, JoinTagConfig> = {
-    "biome-verified-real": { emoji: "✅", label: "Biome", detail: "Biome was verified", priority: 70, },
-    "biome-verified-bait": { emoji: "❌", label: "Biome", detail: "Biome was verified", priority: 70, },
-    "biome-verified-timeout": { emoji: "⚠️", label: "Biome", detail: "Biome check timed out", priority: 50, },
-    "biome-not-verified": { emoji: "⚠️", label: "Biome", detail: "Biome was not verified", priority: 20, },
-
-    "link-verified-safe": { emoji: "✅", label: "Link", detail: "Link was verified, is allowed", priority: 60, },
-    "link-verified-unsafe": { emoji: "❌", label: "Link", detail: "Link was verified, is not allowed", priority: 65, },
-    "link-not-verified": { emoji: "⚠️", label: "Link", detail: "Link was not verified", priority: 20, },
-
-    "failed": { emoji: "❌", label: "Join", detail: "Something went wrong trying to join this.", priority: 80, },
-
-    "unknown": { emoji: "❔", label: "Unknown", detail: "Placeholder tag. This should not appear.", priority: 10, },
+export const TAG_CONFIGS: Record<SnipeTag, SnipeTagConfig> = {
+    "biome-verified-real": { emoji: "✅", label: "Biome", detail: "Biome was verified", priority: 70 },
+    "biome-verified-bait": { emoji: "❌", label: "Biome", detail: "Biome was verified", priority: 70 },
+    "biome-verified-timeout": { emoji: "⚠️", label: "Biome", detail: "Biome check timed out", priority: 50 },
+    "biome-not-verified": { emoji: "⚠️", label: "Biome", detail: "Biome was not verified", priority: 20 },
+    "link-verified-safe": { emoji: "✅", label: "Link", detail: "Link was verified, is allowed", priority: 60 },
+    "link-verified-unsafe": { emoji: "❌", label: "Link", detail: "Link was verified, is not allowed", priority: 65 },
+    "link-not-verified": { emoji: "⚠️", label: "Link", detail: "Link was not verified", priority: 20 },
+    "failed": { emoji: "❌", label: "Join", detail: "Something went wrong trying to join this.", priority: 80 },
+    "unknown": { emoji: "❔", label: "Unknown", detail: "Placeholder tag. This should not appear.", priority: 10 },
 };
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-export interface JoinMetrics {
+export interface SnipeMetrics {
     timeToJoinMs: number;
     joinDurationMs: number;
     overheadMs: number;
 }
 
-export interface JoinEntry {
+export interface SnipeEntry {
     id: number;
     timestamp: number;
 
-    // Trigger que disparou o join
+    // Trigger que disparou o snipe
     triggerName: string;
     triggerType: string;
     triggerPriority: number;
@@ -77,24 +74,26 @@ export interface JoinEntry {
     messageJumpUrl?: string;
     originalContent?: string;
 
-    // Status (adicionados progressivamente via addTags)
-    tags: JoinTag[];
+    // Status (adicionados progressivamente)
+    tags: SnipeTag[];
 
     // Performance
-    metrics?: JoinMetrics;
+    metrics?: SnipeMetrics;
+
+    // URI para rejoin via UI ou notificação clicável
+    joinUri?: string;
 }
 
-/** Dados necessários para criar uma nova entrada. */
-export type NewJoinData = Omit<JoinEntry, "id" | "timestamp" | "tags"> & {
-    tags?: JoinTag[];
+export type NewSnipeData = Omit<SnipeEntry, "id" | "timestamp" | "tags"> & {
+    tags?: SnipeTag[];
 };
 
-type Listener = (entries: JoinEntry[]) => void;
+type Listener = (entries: SnipeEntry[]) => void;
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-class JoinHistoryStore {
-    private _entries: JoinEntry[] = [];
+class SnipeHistoryStore {
+    private _entries: SnipeEntry[] = [];
     private _listeners = new Set<Listener>();
 
     constructor() {
@@ -103,7 +102,7 @@ class JoinHistoryStore {
 
     // ── Leitura ──────────────────────────────────────────────────────────────
 
-    get all(): JoinEntry[] {
+    get all(): SnipeEntry[] {
         return [...this._entries];
     }
 
@@ -111,15 +110,15 @@ class JoinHistoryStore {
         return this._entries.length;
     }
 
-    getById(id: number): JoinEntry | undefined {
+    getById(id: number): SnipeEntry | undefined {
         return this._entries.find(e => e.id === id);
     }
 
-    getRecent(limit = 10): JoinEntry[] {
+    getRecent(limit = 10): SnipeEntry[] {
         return this._entries.slice(0, limit);
     }
 
-    getPrimaryTag(entry: JoinEntry): JoinTag {
+    getPrimaryTag(entry: SnipeEntry): SnipeTag {
         if (!entry.tags.length) return "unknown";
         return entry.tags.reduce((best, tag) =>
             (TAG_CONFIGS[tag]?.priority ?? 0) > (TAG_CONFIGS[best]?.priority ?? 0) ? tag : best
@@ -128,12 +127,8 @@ class JoinHistoryStore {
 
     // ── Mutações ─────────────────────────────────────────────────────────────
 
-    /**
-     * Cria uma nova entrada e retorna seu ID.
-     * Chame addTags() posteriormente para atualizar o status progressivamente.
-     */
-    add(data: NewJoinData): number {
-        const entry: JoinEntry = {
+    add(data: NewSnipeData): number {
+        const entry: SnipeEntry = {
             ...data,
             id: Date.now(),
             timestamp: Date.now(),
@@ -149,13 +144,9 @@ class JoinHistoryStore {
         return entry.id;
     }
 
-    /**
-     * Atualiza campos de uma entrada existente.
-     * Tags são mescladas por padrão — passe `replaceTags: true` para substituir.
-     */
     update(
         id: number,
-        patch: Partial<Omit<JoinEntry, "id" | "timestamp">>,
+        patch: Partial<Omit<SnipeEntry, "id" | "timestamp">>,
         opts: { replaceTags?: boolean; } = {}
     ): boolean {
         const idx = this._entries.findIndex(e => e.id === id);
@@ -173,16 +164,14 @@ class JoinHistoryStore {
         return true;
     }
 
-    /**
-     * Adiciona tags a uma entrada existente, sem duplicar.
-     */
-    addTags(id: number, ...tags: JoinTag[]): boolean {
+    addTags(id: number, ...tags: SnipeTag[]): boolean {
         const entry = this.getById(id);
         if (!entry) return false;
-        // Remove "unknown" quando uma tag real chega
+
         const base = tags.some(t => t !== "unknown")
             ? entry.tags.filter(t => t !== "unknown")
             : entry.tags;
+
         return this.update(id, { tags: [...new Set([...base, ...tags])] }, { replaceTags: true });
     }
 
@@ -200,7 +189,7 @@ class JoinHistoryStore {
     }
 
     addFakes(count: number): void {
-        const choices: JoinTag[][] = [
+        const choices: SnipeTag[][] = [
             ["link-not-verified", "biome-not-verified"],
             ["link-not-verified", "biome-verified-bait"],
             ["link-not-verified", "biome-verified-real"],
@@ -209,12 +198,12 @@ class JoinHistoryStore {
             ["link-verified-unsafe"],
             ["unknown"],
             ["failed"],
-            [] // this is a broken tag!
+            [],
         ];
 
         for (let i = 0; i < count; i++) {
             this.add({
-                triggerName: "Fake Join",
+                triggerName: "Fake Snipe",
                 triggerType: "fake",
                 triggerPriority: 0,
                 tags: choices[Math.floor(Math.random() * choices.length)],
@@ -226,7 +215,6 @@ class JoinHistoryStore {
 
     // ── Observers ────────────────────────────────────────────────────────────
 
-    /** Inscreve um listener e retorna a função de unsubscribe. */
     subscribe(listener: Listener): () => void {
         this._listeners.add(listener);
         return () => this._listeners.delete(listener);
@@ -235,7 +223,7 @@ class JoinHistoryStore {
     private _notify(): void {
         const snapshot = this.all;
         this._listeners.forEach(fn => {
-            try { fn(snapshot); } catch (e) { console.error("[JoinStore] Listener error:", e); }
+            try { fn(snapshot); } catch (e) { console.error("[SnipeStore] Listener error:", e); }
         });
     }
 
@@ -246,7 +234,7 @@ class JoinHistoryStore {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(this._entries));
         } catch (e) {
-            console.error("[JoinStore] Failed to persist:", e);
+            console.error("[SnipeStore] Failed to persist:", e);
         }
     }
 
@@ -255,19 +243,18 @@ class JoinHistoryStore {
             const raw = localStorage.getItem(STORAGE_KEY);
             this._entries = raw ? JSON.parse(raw) : [];
         } catch (e) {
-            console.error("[JoinStore] Failed to load history:", e);
+            console.error("[SnipeStore] Failed to load history:", e);
             this._entries = [];
         }
     }
 }
 
-export const JoinStore = new JoinHistoryStore();
+export const SnipeStore = new SnipeHistoryStore();
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-/** Hook React que se mantém sincronizado com o JoinStore. */
-export function useJoinHistory(): JoinEntry[] {
-    const [entries, setEntries] = React.useState<JoinEntry[]>(JoinStore.all);
-    React.useEffect(() => JoinStore.subscribe(setEntries), []);
+export function useSnipeHistory(): SnipeEntry[] {
+    const [entries, setEntries] = React.useState<SnipeEntry[]>(SnipeStore.all);
+    React.useEffect(() => SnipeStore.subscribe(setEntries), []);
     return entries;
 }

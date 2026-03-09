@@ -12,7 +12,7 @@ import { React, RunningGameStore } from "@webpack/common";
 
 import { getRobloxProcess } from "../../../../services/RobloxService";
 import { JoinLockStore } from "../../../../stores/JoinLockStore";
-import { JoinStore } from "../../../../stores/JoinStore";
+import { SnipeStore } from "../../../../stores/SnipeStore";
 import { Pill } from "../../../Pill";
 
 const logger = new Logger("SolRadar.Developer");
@@ -69,7 +69,7 @@ export function DeveloperTab() {
                     + add fake lock (p10, 30s)
                 </Button>
 
-                <Button size="small" variant="positive" onClick={() => JoinStore.addFakes(1)}>
+                <Button size="small" variant="positive" onClick={() => SnipeStore.addFakes(1)}>
                     + add fake snipe
                 </Button>
             </div>

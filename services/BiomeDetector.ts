@@ -26,15 +26,27 @@ const logger = new Logger("SolRadar.BiomeDetector");
 
 export interface BiomeSnapshot {
     username: string;
-    /** null = desconectado ou stale (>60s sem update) */
     biome: string | null;
     lastUpdatedAt: number;
 }
 
-export type BiomeVerdict =
-    | { result: "real"; biome: string; }
-    | { result: "bait"; biome: string; }
-    | { result: "timeout"; };
+export interface BiomeChangedEvent {
+    username: string;
+    from: string | null;
+    to: string;
+}
+
+export interface BiomeClearedEvent {
+    username: string;
+    from: string;
+}
+
+type BiomeEventMap = {
+    biomeChanged: BiomeChangedEvent;
+    biomeCleared: BiomeClearedEvent;
+};
+
+type BiomeListener<K extends keyof BiomeEventMap> = (event: BiomeEventMap[K]) => void;
 
 interface AccountState {
     userid: string;
@@ -47,7 +59,6 @@ interface AccountState {
 
 const STALE_THRESHOLD_MS = 60_000;
 
-/** Extrai o nome do bioma de uma linha de BloxstrapRPC. Pure function — sem I/O. */
 function _parseBiomeFromRpc(rpcLine: string): string | null {
     try {
         const jsonStart = rpcLine.indexOf("{");
@@ -65,7 +76,8 @@ function _parseBiomeFromRpc(rpcLine: string): string | null {
 class BiomeDetectorService {
     private _running = false;
     private _loop?: ReturnType<typeof setInterval>;
-    private _accounts: Map<string, AccountState> = new Map(); // userid → state
+    private _accounts: Map<string, AccountState> = new Map();
+    private _listeners: { [K in keyof BiomeEventMap]?: Set<BiomeListener<K>>; } = {};
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -106,7 +118,28 @@ class BiomeDetectorService {
         this._running = false;
         if (this._loop) clearInterval(this._loop);
         this._loop = undefined;
+        this._listeners = {};
         logger.info("Detection loop stopped.");
+    }
+
+    // ── Events ────────────────────────────────────────────────────────────────
+
+    on<K extends keyof BiomeEventMap>(event: K, listener: BiomeListener<K>): () => void {
+        if (!this._listeners[event]) {
+            this._listeners[event] = new Set() as any;
+        }
+        (this._listeners[event] as Set<BiomeListener<K>>).add(listener);
+        return () => this.off(event, listener);
+    }
+
+    off<K extends keyof BiomeEventMap>(event: K, listener: BiomeListener<K>): void {
+        (this._listeners[event] as Set<BiomeListener<K>> | undefined)?.delete(listener);
+    }
+
+    private _emit<K extends keyof BiomeEventMap>(event: K, payload: BiomeEventMap[K]): void {
+        (this._listeners[event] as Set<BiomeListener<K>> | undefined)?.forEach(fn => {
+            try { fn(payload); } catch (e) { logger.error(`Listener error on "${event}":`, e); }
+        });
     }
 
     // ── Queries ───────────────────────────────────────────────────────────────
@@ -132,94 +165,6 @@ class BiomeDetectorService {
             if (snap?.biome?.toLowerCase() === target) return true;
         }
         return false;
-    }
-
-    /**
-     * Aguarda detecção de bioma em duas fases:
-     *
-     * Fase 1 — espera o logPath mudar (Roblox reiniciou, novo arquivo de log).
-     *           Isso garante que nenhuma RPC do jogo anterior é lida.
-     *
-     * Fase 2 — lê RPCs do novo log até encontrar um bioma.
-     *           Compara com o esperado e resolve "real", "bait" ou "timeout".
-     *
-     * @param expectedBiome - Nome do bioma esperado (case-insensitive)
-     * @param timeoutMs     - Timeout total em ms (padrão: 30s)
-     */
-    waitForBiome(
-        expectedBiome: string,
-        timeoutMs = 30_000,
-        startDelayMs = 0,
-    ): { promise: Promise<BiomeVerdict>; cancel: () => void; } {
-        const expected = expectedBiome.toLowerCase();
-        let resolved = false;
-        let intervalId: ReturnType<typeof setInterval>;
-        let timerId: ReturnType<typeof setTimeout>;
-        let delayId: ReturnType<typeof setTimeout>;
-        let resolveFn!: (v: BiomeVerdict) => void;
-
-        const logPathsAtJoin = new Map<string, string | null>(
-            Array.from(this._accounts.entries()).map(([id, s]) => [id, s.logPath])
-        );
-
-        const cleanup = () => {
-            clearInterval(intervalId);
-            clearTimeout(timerId);
-            clearTimeout(delayId);
-        };
-
-        const startPolling = () => {
-            intervalId = setInterval(() => {
-                if (resolved) return;
-
-                for (const state of this._accounts.values()) {
-                    const previousPath = logPathsAtJoin.get(state.userid);
-                    if (state.logPath === previousPath) continue;
-
-                    const snap = this.getBiome(state.username);
-                    if (!snap?.biome) continue;
-
-                    const detected = snap.biome.toLowerCase();
-                    resolved = true;
-                    cleanup();
-
-                    if (detected === expected) {
-                        resolveFn({ result: "real", biome: snap.biome });
-                    } else {
-                        logger.warn(`Expected "${expected}", got "${detected}" — bait.`);
-                        resolveFn({ result: "bait", biome: snap.biome });
-                    }
-                    return;
-                }
-            }, 500);
-        };
-
-        const promise = new Promise<BiomeVerdict>(resolve => {
-            resolveFn = resolve;
-
-            if (startDelayMs > 0) {
-                logger.debug(`waitForBiome: waiting ${startDelayMs}ms before polling.`);
-                delayId = setTimeout(startPolling, startDelayMs);
-            } else {
-                startPolling();
-            }
-
-            timerId = setTimeout(() => {
-                if (resolved) return;
-                resolved = true;
-                cleanup();
-                resolve({ result: "timeout" });
-            }, timeoutMs);
-        });
-
-        const cancel = () => {
-            if (resolved) return;
-            resolved = true;
-            cleanup();
-            resolveFn({ result: "timeout" });
-        };
-
-        return { promise, cancel };
     }
 
     // ── Internal tick ─────────────────────────────────────────────────────────
@@ -252,7 +197,6 @@ class BiomeDetectorService {
             if (found && found.path !== state.logPath) {
                 logger.debug(`Log path for ${state.username} updated: ${found.path}`);
                 state.logPath = found.path;
-                // Novo arquivo = novo jogo: limpa estado do jogo anterior
                 state.lastKnownBiome = undefined;
                 state.lastSeenRpcTs = undefined;
                 state.lastBiomeUpdatedAt = 0;
@@ -274,9 +218,11 @@ class BiomeDetectorService {
 
         if (effectiveDisconnected) {
             if (state.lastKnownBiome !== undefined) {
+                const from = state.lastKnownBiome;
                 logger.info(`${state.username} disconnected — clearing biome.`);
                 state.lastKnownBiome = undefined;
                 state.lastBiomeUpdatedAt = Date.now();
+                this._emit("biomeCleared", { username: state.username, from });
             }
             return;
         }
@@ -292,11 +238,15 @@ class BiomeDetectorService {
         if (!biome) return;
 
         if (state.lastKnownBiome !== biome) {
-            logger.info(`${state.username}: biome "${state.lastKnownBiome ?? "none"}" → "${biome}"`);
+            const from = state.lastKnownBiome ?? null;
+            logger.info(`${state.username}: biome "${from ?? "none"}" → "${biome}"`);
+            state.lastKnownBiome = biome;
+            state.lastBiomeUpdatedAt = Date.now();
+            this._emit("biomeChanged", { username: state.username, from, to: biome });
+        } else {
+            state.lastKnownBiome = biome;
+            state.lastBiomeUpdatedAt = Date.now();
         }
-
-        state.lastKnownBiome = biome;
-        state.lastBiomeUpdatedAt = Date.now();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

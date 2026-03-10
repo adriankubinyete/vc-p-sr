@@ -178,99 +178,112 @@ function activateJoinLock(trigger: Trigger, log: Logger): void {
     }
 }
 
-/**
- * Aguarda detecção de bioma via log do Roblox e atualiza o JoinStore com o resultado.
- * Fire-and-forget — não bloqueia handleMessage.
- * O cancel() é retornado para que o chamador possa cancelar se um novo join acontecer.
- */
-function startBiomeDetection(
-    snipe: Snipe,
-    log: Logger,
-): (() => void) | null {
-    if (!snipe.trigger.biome?.detectionEnabled) {
-        snipe.markAsBiomeNotVerified();
-        return null;
-    }
-
-    if (!BIOME_DETECTABLE_TYPES.has(snipe.trigger.type)) {
-        return null;
-    }
-
-    if (!settings.store.detectorEnabled) {
-        log.debug(`[${snipe.trigger.name}] Biome detector globally disabled.`);
-        snipe.markAsBiomeNotVerified();
-        return null;
-    }
-
-    const expectedBiome = snipe.trigger.biome.detectionKeyword || snipe.trigger.name;
-    const startDelayMs = settings.store.closeGameBeforeJoin ? 6_000 : 0;
-    log.info(`[${snipe.trigger.name}] Awaiting biome detection — expecting "${expectedBiome}" (delay: ${startDelayMs}ms).`);
-
-    const { promise, cancel } = BiomeDetector.waitForBiome(
-        expectedBiome,
-        settings.store.detectorTimeoutMs ?? 30_000,
-        startDelayMs,
-    );
-
-    const t0 = performance.now();
-
-    promise.then(verdict => {
-        const elapsed = Math.round(performance.now() - t0);
-        log.info(`[${snipe.trigger.name}] Biome verdict: ${verdict.result} (${elapsed}ms)`);
-
-        switch (verdict.result) {
-            case "real":
-                snipe.markAsBiomeReal();
-                _waitForBiomeEnd(snipe, log);
-                showNotification({
-                    title: `✅ SoRa :: Real — ${snipe.trigger.name}`,
-                    body: `Detected in ${elapsed}ms`,
-                    icon: snipe.trigger.iconUrl,
-                });
-                break;
-
-            case "bait":
-                snipe.markAsBiomeBait();
-                if (JoinLockStore.isLocked) {
-                    log.warn(`[${snipe.trigger.name}] Bait detected — releasing join lock.`);
-                    JoinLockStore.release();
-                }
-                showNotification({
-                    title: `❌ SoRa :: Fake — ${snipe.trigger.name}`,
-                    body: `Got "${verdict.biome}" instead (${elapsed}ms)`,
-                    icon: snipe.trigger.iconUrl,
-                });
-                break;
-
-            case "timeout":
-                snipe.markAsBiomeTimeout();
-                log.warn(`[${snipe.trigger.name}] Biome detection timed out — releasing join lock.`);
-                if (JoinLockStore.isLocked) JoinLockStore.release();
-                showNotification({
-                    title: `⏱ SoRa :: Timeout — ${snipe.trigger.name}`,
-                    body: "Biome detection timed out.",
-                    icon: snipe.trigger.iconUrl,
-                });
-                break;
-        }
-    });
-
-    return cancel;
-}
-
-function _waitForBiomeEnd(snipe: Snipe, log: Logger): void {
-    const { promise } = BiomeDetector.waitForBiome("__never_match__", 1_800_000);
-    promise.then(() => {
-        log.info(`[${snipe.trigger.name}] Biome ended — releasing join lock.`);
-        JoinLockStore.release();
-    });
+function isJoinLocked(trigger: Trigger) {
+    return JoinLockStore.isBlocked(trigger.state.priority);
 }
 
 // Active biome detection cancel function — cancels previous detection when a new join happens
-let _cancelBiomeDetection: (() => void) | null = null;
+let _unsubscribeBiomeDetection: (() => void) | null = null;
 
-function isJoinLocked(trigger: Trigger) {
-    return JoinLockStore.isBlocked(trigger.state.priority);
+function _watchForBiomeEnd(snipe: Snipe, log: Logger): void {
+    const expected = (snipe.trigger.biome?.detectionKeyword || snipe.trigger.name).toLowerCase();
+
+    log.debug(`[${snipe.trigger.name}] Waiting for biome to end... Expecting: "${expected}"`);
+
+    const unsubChange = BiomeDetector.on("biomeChanged", ({ to }) => {
+        log.info(`[${snipe.trigger.name}] Biome ended (changed to "${to}") — releasing lock.`);
+        JoinLockStore.release();
+        unsubChange();
+        unsubClear();
+    });
+
+    const unsubClear = BiomeDetector.on("biomeCleared", () => {
+        log.info(`[${snipe.trigger.name}] Biome ended (disconnected) — releasing lock.`);
+        JoinLockStore.release();
+        unsubChange();
+        unsubClear();
+    });
+}
+
+function startBiomeDetection(snipe: Snipe, log: Logger): void {
+    _unsubscribeBiomeDetection?.(); // Cancela qualquer detecção anterior
+
+    if (!BIOME_DETECTABLE_TYPES.has(snipe.trigger.type)) {
+        return;
+    }
+    if (!snipe.trigger.biome?.detectionEnabled) {
+        snipe.markAsBiomeNotVerified();
+        return;
+    }
+    if (!settings.store.detectorEnabled) {
+        log.debug(`[${snipe.trigger.name}] Biome detector globally disabled.`);
+        snipe.markAsBiomeNotVerified();
+        return;
+    }
+
+    const expected = (snipe.trigger.biome.detectionKeyword || snipe.trigger.name).toLowerCase();
+    const startDelayMs = settings.store.closeGameBeforeJoin ? 6_000 : 0;
+    const t0 = performance.now();
+
+    log.info(`[${snipe.trigger.name}] Awaiting biome — expecting "${expected}" (delay: ${startDelayMs}ms).`);
+
+    let detecting = true;
+
+    const unsubChange = BiomeDetector.on("biomeChanged", ({ to }) => {
+        if (!detecting) return;
+        if (startDelayMs > 0 && performance.now() - t0 < startDelayMs) return;
+
+        const elapsed = Math.round(performance.now() - t0);
+        const detected = to.toLowerCase();
+        detecting = false;
+        _unsubscribeBiomeDetection = null;
+
+        log.info(`[${snipe.trigger.name}] Biome verdict: ${detected === expected ? "real" : "bait"} (${elapsed}ms)`);
+
+        if (detected === expected) {
+            snipe.markAsBiomeReal();
+            _watchForBiomeEnd(snipe, log);
+            showNotification({
+                title: `✅ SoRa :: Real — ${snipe.trigger.name}`,
+                body: `Detected in ${elapsed}ms`,
+                icon: snipe.trigger.iconUrl,
+            });
+        } else {
+            snipe.markAsBiomeBait();
+            unsubChange();
+            if (JoinLockStore.isLocked) {
+                log.warn(`[${snipe.trigger.name}] Bait — releasing lock.`);
+                JoinLockStore.release();
+            }
+            showNotification({
+                title: `❌ SoRa :: Fake — ${snipe.trigger.name}`,
+                body: `Got "${to}" instead (${elapsed}ms)`,
+                icon: snipe.trigger.iconUrl,
+            });
+        }
+    });
+
+    // Timeout manual
+    const timer = setTimeout(() => {
+        if (!detecting) return;
+        detecting = false;
+        unsubChange();
+        _unsubscribeBiomeDetection = null;
+        snipe.markAsBiomeTimeout();
+        log.warn(`[${snipe.trigger.name}] Biome detection timed out.`);
+        if (JoinLockStore.isLocked) JoinLockStore.release();
+        showNotification({
+            title: `⏱ SoRa :: Timeout — ${snipe.trigger.name}`,
+            body: "Biome detection timed out.",
+            icon: snipe.trigger.iconUrl,
+        });
+    }, (settings.store.detectorTimeoutMs ?? 30_000) + startDelayMs);
+
+    _unsubscribeBiomeDetection = () => {
+        detecting = false;
+        clearTimeout(timer);
+        unsubChange();
+    };
 }
 
 // ─── join stuff ────────────────────────────────────────────────────────────────
@@ -322,8 +335,7 @@ async function join(snipe: Snipe, log: Logger): Promise<void> {
 
     activateJoinLock(snipe.trigger, log);
 
-    _cancelBiomeDetection?.();
-    _cancelBiomeDetection = startBiomeDetection(snipe, log);
+    startBiomeDetection(snipe, log);
 
 }
 
@@ -474,8 +486,8 @@ export default definePlugin({
     stop() {
         logger.info("Stopping");
         BiomeDetector.stop();
-        _cancelBiomeDetection?.();
-        _cancelBiomeDetection = null;
+        _unsubscribeBiomeDetection?.();
+        _unsubscribeBiomeDetection = null;
     },
 
     flux: {

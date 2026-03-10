@@ -253,10 +253,11 @@ function KeywordsInput({ label, hint, value, onChange, placeholder }: {
 
 // ─── IdChipInput ──────────────────────────────────────────────────────────────
 
-type ChipKind = "user" | "channel";
+type ChipKind = "user" | "channel" | "guild";
 interface ResolvedUser { kind: "user"; id: string; name: string; discriminator?: string; avatarUrl?: string; }
 interface ResolvedChannel { kind: "channel"; id: string; name: string; guildName?: string; guildIcon?: string; }
-type ResolvedEntry = ResolvedUser | ResolvedChannel;
+interface ResolvedGuild { kind: "guild"; id: string; name: string; iconUrl?: string; }
+type ResolvedEntry = ResolvedUser | ResolvedChannel | ResolvedGuild;
 
 function resolveId(id: string, kind: ChipKind): ResolvedEntry | null {
     try {
@@ -269,6 +270,16 @@ function resolveId(id: string, kind: ChipKind): ResolvedEntry | null {
                 discriminator: user.discriminator !== "0" ? user.discriminator : undefined,
                 avatarUrl: user.avatar
                     ? `https://cdn.discordapp.com/avatars/${id}/${user.avatar}.webp?size=32`
+                    : undefined,
+            };
+        } else if (kind === "guild") {
+            const guild = GuildStore?.getGuild(id);
+            if (!guild) return null;
+            return {
+                kind: "guild", id,
+                name: guild.name ?? id,
+                iconUrl: guild.icon
+                    ? `https://cdn.discordapp.com/icons/${id}/${guild.icon}.webp?size=32`
                     : undefined,
             };
         } else {
@@ -303,13 +314,23 @@ const chip = {
 function EntryChip({ entry, onRemove }: { entry: ResolvedEntry; onRemove: () => void; }) {
     const avatarUrl = entry.kind === "user"
         ? (entry as ResolvedUser).avatarUrl
-        : (entry as ResolvedChannel).guildIcon;
-    const initial = ((entry.kind === "user"
+        : entry.kind === "guild"
+            ? (entry as ResolvedGuild).iconUrl
+            : (entry as ResolvedChannel).guildIcon;
+
+    const initial = (entry.kind === "guild"
         ? entry.name
-        : ((entry as ResolvedChannel).guildName ?? entry.name)) || "?").charAt(0).toUpperCase();
+        : entry.kind === "user"
+            ? entry.name
+            : ((entry as ResolvedChannel).guildName ?? entry.name)
+            || "?").charAt(0).toUpperCase();
+
     const label = entry.kind === "user"
         ? ((entry as ResolvedUser).discriminator ? `${entry.name}#${(entry as ResolvedUser).discriminator}` : entry.name)
-        : `#${entry.name}`;
+        : entry.kind === "guild"
+            ? entry.name
+            : `#${entry.name}`;
+
     const sub = entry.kind === "channel" && (entry as ResolvedChannel).guildName
         ? (entry as ResolvedChannel).guildName!
         : entry.id;
@@ -347,7 +368,9 @@ function IdChipInput({ kind, label, hint, ids, onChange }: {
             status: "error",
             message: kind === "user"
                 ? "User not found in local cache. They need to be visible in your current session."
-                : "Channel not found in local cache. Open the channel first so Discord loads it.",
+                : kind === "guild"
+                    ? "Guild not found in local cache. You need to be in this server."
+                    : "Channel not found in local cache. Open the channel first so Discord loads it.",
         });
     };
 
@@ -376,7 +399,11 @@ function IdChipInput({ kind, label, hint, ids, onChange }: {
                 <div style={{ flex: 1 }}>
                     <TextInput
                         value={inputVal}
-                        placeholder={kind === "user" ? "User ID (e.g. 188851299255713792)" : "Channel ID (e.g. 123456789012345678)"}
+                        placeholder={
+                            kind === "user" ? "User ID (e.g. 188851299255713792)"
+                                : kind === "guild" ? "Guild ID (e.g. 123456789012345678)"
+                                    : "Channel ID (e.g. 123456789012345678)"
+                        }
                         onChange={handleChange}
                         onKeyDown={(e: React.KeyboardEvent) => e.key === "Enter" && handleAdd()}
                     />
@@ -504,7 +531,7 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
 // ─── Tab: Conditions ──────────────────────────────────────────────────────────
 
 function ConditionsTab({ conditions, onChange }: { conditions: TriggerConditions; onChange: (c: TriggerConditions) => void; }) {
-    const { keywords, fromUser, inChannel } = conditions;
+    const { keywords } = conditions;
     const patchMatch = (p: Partial<typeof keywords.match>) => onChange({ ...conditions, keywords: { ...keywords, match: { ...keywords.match, ...p } } });
     const patchExclude = (p: Partial<typeof keywords.exclude>) => onChange({ ...conditions, keywords: { ...keywords, exclude: { ...keywords.exclude, ...p } } });
 
@@ -520,24 +547,6 @@ function ConditionsTab({ conditions, onChange }: { conditions: TriggerConditions
             <p style={S.sectionDescription}>Message must <strong>NOT</strong> contain any of these. Separate with commas.</p>
             <KeywordsInput label="Keywords" value={keywords.exclude.value} onChange={v => patchExclude({ value: v })} placeholder="hunt, help" />
             <SwitchField label="Strict match" hint="Must match exact word boundary, not just a substring." value={keywords.exclude.strict} onChange={v => patchExclude({ strict: v })} />
-
-            <p style={S.sectionTitle}>User Filter</p>
-            <IdChipInput
-                kind="user"
-                label="Allowed Users"
-                hint="Only match messages from these users. Leave empty to match any user."
-                ids={fromUser}
-                onChange={ids => onChange({ ...conditions, fromUser: ids })}
-            />
-
-            <p style={S.sectionTitle}>Channel Filter</p>
-            <IdChipInput
-                kind="channel"
-                label="Allowed Channels"
-                hint="In addition to monitored channels, only match this trigger in these channels. Leave empty for any channel."
-                ids={inChannel}
-                onChange={ids => onChange({ ...conditions, inChannel: ids })}
-            />
 
         </div>
     );
@@ -602,13 +611,13 @@ function BiomeTab({ biome, onChange }: { biome: TriggerBiome; onChange: (b: Trig
 
 function AdvancedTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: Partial<Omit<Trigger, "id">>) => void; }) {
     const { conditions } = draft;
-    const { bypassMonitoredOnly, bypassIgnoredChannels, bypassIgnoredGuilds, bypassMatchAmbiguity, bypassLinkVerification } = conditions;
+    const { bypassMonitoredOnly, bypassIgnoredChannels, bypassIgnoredGuilds, bypassMatchAmbiguity, bypassLinkVerification, fromUser, ignoredChannels, ignoredGuilds, inChannel } = conditions;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 
             <p style={S.sectionTitle}>Bypasses</p>
-            <p style={{ ...S.noteWarning, fontSize: 16 }}>These options disable safety checks. Only change them if you know what you're doing.</p>
+            <p style={{ ...S.noteDanger, fontSize: 14 }}>These options disable safety checks. Only change them if you know what you're doing.</p>
 
             <SwitchField
                 label="Bypass monitored channels"
@@ -639,6 +648,40 @@ function AdvancedTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: 
                 hint="Skip Place ID verification for this trigger."
                 value={bypassLinkVerification}
                 onChange={v => patch({ conditions: { ...conditions, bypassLinkVerification: v } })}
+            />
+
+            <p style={S.sectionTitle}>User Filter</p>
+            <IdChipInput
+                kind="user"
+                label="Allowed Users"
+                hint="Only match messages from these users. Leave empty to match any user."
+                ids={fromUser}
+                onChange={ids => patch({ conditions: { ...conditions, fromUser: ids } })}
+            />
+
+            <p style={S.sectionTitle}>Channel Filter</p>
+            <IdChipInput
+                kind="channel"
+                label="Allowed Channels"
+                hint="In addition to monitored channels, only match this trigger in these channels. Leave empty for any channel."
+                ids={inChannel}
+                onChange={ids => patch({ conditions: { ...conditions, inChannel: ids } })}
+            />
+            <IdChipInput
+                kind="channel"
+                label="Ignored Channels"
+                hint="Never match this trigger in these channels, even if other conditions pass."
+                ids={ignoredChannels}
+                onChange={ids => patch({ conditions: { ...conditions, ignoredChannels: ids } })}
+            />
+
+            <p style={S.sectionTitle}>Guild Filter</p>
+            <IdChipInput
+                kind="guild"
+                label="Ignored Guilds"
+                hint="Never match this trigger in these guilds, even if other conditions pass. Useful for guilds with no-sniper policies."
+                ids={ignoredGuilds}
+                onChange={ids => patch({ conditions: { ...conditions, ignoredGuilds: ids } })}
             />
 
         </div>

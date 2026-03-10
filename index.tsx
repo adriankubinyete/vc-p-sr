@@ -72,6 +72,8 @@ function resolveTrigger({ message, channel, guild }: { message: Message; channel
 
 // ─── channel validation ───────────────────────────────────────────────────────
 
+// ─── channel validation ───────────────────────────────────────────────────────
+
 function isMessageAllowed({ channel, message, trigger }: { channel: Channel; message: Message; trigger: Trigger; }, log: Logger): boolean {
     // Guild-level ignore (com bypass por trigger)
     if (!trigger.conditions.bypassIgnoredGuilds) {
@@ -82,6 +84,12 @@ function isMessageAllowed({ channel, message, trigger }: { channel: Channel; mes
         }
     }
 
+    // Trigger-level guild ignore
+    if (trigger.conditions.ignoredGuilds.includes(channel.guild_id)) {
+        log.debug(`[${trigger.name}] Guild ${channel.guild_id} is ignored by trigger — skipping.`);
+        return false;
+    }
+
     // Channel-level ignore (com bypass por trigger)
     if (!trigger.conditions.bypassIgnoredChannels) {
         const ignoredChannels = parseCsv(settings.store.ignoredChannels);
@@ -89,6 +97,12 @@ function isMessageAllowed({ channel, message, trigger }: { channel: Channel; mes
             log.debug(`[${trigger.name}] Channel #${channel.name} is ignored — skipping.`);
             return false;
         }
+    }
+
+    // Trigger-level channel ignore
+    if (trigger.conditions.ignoredChannels.includes(channel.id)) {
+        log.debug(`[${trigger.name}] Channel #${channel.name} is ignored by trigger — skipping.`);
+        return false;
     }
 
     // User-level ignore (sem bypass)

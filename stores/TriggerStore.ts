@@ -43,10 +43,12 @@ export interface TriggerConditions {
     };
     fromUser: string[]; // empty = ignore check
     inChannel: string[]; // empty = ignore check
+    ignoredChannels: string[]; // trigger-level ignored channels
+    ignoredGuilds: string[]; // trigger-level ignored guilds
     bypassMatchAmbiguity: boolean; // bypass the "multiple matches" check
     bypassMonitoredOnly: boolean; // bypass the "only in monitored channels" check
-    bypassIgnoredGuilds: boolean; // bypass the "ignore this guild" check
-    bypassIgnoredChannels: boolean; // bypass the "ignore this channel" check
+    bypassIgnoredGuilds: boolean; // bypass the global "ignore this guild" check
+    bypassIgnoredChannels: boolean; // bypass the global "ignore this channel" check
     bypassLinkVerification: boolean; // bypass the Place ID check
 }
 
@@ -87,6 +89,8 @@ export const DEFAULT_CONDITIONS: TriggerConditions = {
     },
     fromUser: [],
     inChannel: [],
+    ignoredChannels: [],
+    ignoredGuilds: [],
     bypassMatchAmbiguity: false,
     bypassMonitoredOnly: false,
     bypassIgnoredGuilds: false,
@@ -143,6 +147,8 @@ function migrateTrigger(raw: any): Trigger {
             },
             fromUser: raw.conditions?.fromUser ?? [],
             inChannel: raw.conditions?.inChannel ?? [],
+            ignoredChannels: raw.conditions?.ignoredChannels ?? [],
+            ignoredGuilds: raw.conditions?.ignoredGuilds ?? [],
             bypassMatchAmbiguity: raw.conditions?.bypassMatchAmbiguity ?? false,
             bypassMonitoredOnly: raw.conditions?.bypassMonitoredOnly ?? false,
             bypassIgnoredGuilds: raw.conditions?.bypassIgnoredGuilds ?? false,

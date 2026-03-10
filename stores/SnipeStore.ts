@@ -22,6 +22,8 @@ export type SnipeTag =
     | "link-verified-safe" // link resolveu para o jogo correto
     | "link-verified-unsafe" // link é bait (jogo diferente)
     | "link-not-verified" // verificação desativada
+    | "redundant-biome-ignored" // ignorado devido a redundancia
+    | "redundant-biome-bypassed" // redundante, mas bateu no bypass keyword
     | "failed" // openUri falhou
     | "unknown"; // estado inicial
 
@@ -36,11 +38,13 @@ export interface SnipeTagConfig {
 export const TAG_CONFIGS: Record<SnipeTag, SnipeTagConfig> = {
     "biome-verified-real": { emoji: "✅", label: "Biome", detail: "Biome was verified", priority: 70 },
     "biome-verified-bait": { emoji: "❌", label: "Biome", detail: "Biome was verified", priority: 70 },
-    "biome-verified-timeout": { emoji: "⚠️", label: "Biome", detail: "Biome check timed out", priority: 50 },
+    "biome-verified-timeout": { emoji: "⏳", label: "Biome", detail: "Biome check timed out", priority: 50 },
     "biome-not-verified": { emoji: "⚠️", label: "Biome", detail: "Biome was not verified", priority: 20 },
     "link-verified-safe": { emoji: "✅", label: "Link", detail: "Link was verified, is allowed", priority: 60 },
     "link-verified-unsafe": { emoji: "❌", label: "Link", detail: "Link was verified, is not allowed", priority: 65 },
     "link-not-verified": { emoji: "⚠️", label: "Link", detail: "Link was not verified", priority: 20 },
+    "redundant-biome-ignored": { emoji: "❌", label: "Ignored", detail: "This snipe was ignored due to biome redundancy", priority: 0 },
+    "redundant-biome-bypassed": { emoji: "➡️", label: "Bypassed", detail: "This biome was redundant, but a fresh-bypass keyword was detected.", priority: 0 },
     "failed": { emoji: "❌", label: "Join", detail: "Something went wrong trying to join this.", priority: 80 },
     "unknown": { emoji: "❔", label: "Unknown", detail: "Placeholder tag. This should not appear.", priority: 10 },
 };
@@ -72,7 +76,7 @@ export interface SnipeEntry {
     channelName?: string;
     guildName?: string;
     messageJumpUrl?: string;
-    originalContent?: string;
+    processedMessageText?: string;
 
     // Status (adicionados progressivamente)
     tags: SnipeTag[];
@@ -82,6 +86,8 @@ export interface SnipeEntry {
 
     // URI para rejoin via UI ou notificação clicável
     joinUri?: string;
+    // link do servidor privado
+    link?: string;
 }
 
 export type NewSnipeData = Omit<SnipeEntry, "id" | "timestamp" | "tags"> & {
@@ -208,7 +214,7 @@ class SnipeHistoryStore {
                 triggerPriority: 0,
                 tags: choices[Math.floor(Math.random() * choices.length)],
                 metrics: { timeToJoinMs: 0, joinDurationMs: 0, overheadMs: 0 },
-                originalContent: "Fake message",
+                processedMessageText: "Fake message",
             });
         }
     }

@@ -288,9 +288,42 @@ function startBiomeDetection(snipe: Snipe, log: Logger): void {
 
 // ─── join stuff ────────────────────────────────────────────────────────────────
 
-function shouldJoin(snipe: Snipe): boolean {
-    if (!settings.store.autoJoinEnabled) return false;
-    if (!snipe.trigger.state.autojoin) return false;
+function isRedundantJoin(snipe: Snipe, log: Logger): boolean {
+    if (!snipe.trigger.biome?.skipRedundantJoin) return false;
+
+    const expected = snipe.trigger.biome.detectionKeyword || snipe.trigger.name;
+    if (!BiomeDetector.isAnyAccountInBiome(expected)) return false;
+
+    // Bypass se a mensagem indica bioma recém-iniciado
+    const freshKeywords = parseCsv("start,fresh");
+    if (freshKeywords.size > 0) {
+        const content = snipe.getRawMessageContent().toLowerCase() ?? "";
+        if ([...freshKeywords].some(kw => content.includes(kw.toLowerCase()))) {
+            snipe.markAsRedundancyBypassed();
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function shouldJoin(snipe: Snipe, log: Logger): boolean {
+    if (!settings.store.autoJoinEnabled) {
+        log.debug(`[${snipe.trigger.name}] Auto-join globally disabled.`);
+        return false;
+    }
+
+    if (!snipe.trigger.state.autojoin) {
+        log.debug(`[${snipe.trigger.name}] Auto-join is disabled for this trigger.`);
+        return false;
+    }
+
+    if (isRedundantJoin(snipe, log)) {
+        log.info(`[${snipe.trigger.name}] Already in biome and no fresh keywords — skipping join.`);
+        snipe.markAsRedundantBiome();
+        return false;
+    }
+
     return true;
 }
 
@@ -427,7 +460,7 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
 
     const snipe = Snipe.create(message, link, trigger, channel, guild, tMessageReceived);
 
-    if (shouldJoin(snipe)) await join(snipe, log);
+    if (shouldJoin(snipe, log)) await join(snipe, log);
     if (shouldNotify(snipe)) notify(snipe, log);
 
 }

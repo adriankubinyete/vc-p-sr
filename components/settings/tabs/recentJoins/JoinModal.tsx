@@ -77,7 +77,9 @@ function JoinModal({ entry, modalProps }: {
                     <section>
                         <Heading tag="h5" style={{ marginBottom: 8 }}>Details</Heading>
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <DetailRow label="Trigger" value={`${entry.triggerName} (p${entry.triggerPriority})`} />
+                            <DetailRow label="Snipe ID" value={`${entry.id}`} />
+                            <DetailRow label="Trigger" value={`${entry.triggerName}`} />
+                            <DetailRow label="Priority" value={`${entry.triggerPriority}`} />
                             <DetailRow label="Type" value={entry.triggerType} />
                             <DetailRow label="Time" value={`${formatTimeAgo(entry.timestamp)} ⬝ ${new Date(entry.timestamp).toLocaleString()}`} />
                             {entry.channelName && (
@@ -90,6 +92,28 @@ function JoinModal({ entry, modalProps }: {
                                         {entry.authorName}
                                     </span>
                                 } />
+                            )}
+                            {entry?.processedMessageText && (
+                                <textarea
+                                    readOnly
+                                    value={entry.processedMessageText ?? ""}
+                                    style={{
+                                        width: "100%",
+                                        resize: "vertical",
+                                        padding: "8px 10px",
+                                        borderRadius: 6,
+                                        border: "1px solid var(--background-modifier-accent)",
+                                        background: "var(--background-secondary)",
+                                        color: "var(--text-normal)",
+                                        fontSize: 13,
+                                        fontFamily: "var(--font-code)",
+                                        lineHeight: 1.5,
+                                        minHeight: 60,
+                                        boxSizing: "border-box",
+                                        outline: "none",
+                                        scrollbarWidth: "thin",
+                                    }}
+                                />
                             )}
                         </div>
                     </section>
@@ -114,9 +138,9 @@ function JoinModal({ entry, modalProps }: {
                     {entry.joinUri && (
                         <Button variant="positive" size="small" onClick={joinServer}>Join</Button>
                     )}
-                    {entry.originalContent && (
+                    {entry.link && (
                         <Button variant="primary" size="small" onClick={() => {
-                            copyToClipboard(entry.originalContent!);
+                            copyToClipboard(entry.link!);
                             showToast("Copied!", Toasts.Type.SUCCESS);
                         }}>
                             Copy link

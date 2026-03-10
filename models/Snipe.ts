@@ -24,6 +24,7 @@ export class Snipe {
     readonly guild: Guild;
     readonly link: RobloxLink;
     readonly tMessageReceived: number;
+    readonly messageContent: string = "";
 
     private constructor(
         id: number,
@@ -62,7 +63,8 @@ export class Snipe {
             channelName: channel.name,
             guildName: guild.name,
             messageJumpUrl: `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}`,
-            originalContent: link.link,
+            processedMessageText: message.content,
+            link: link.link,
             joinUri: buildJoinUri(link),
         });
 
@@ -86,6 +88,8 @@ export class Snipe {
     markAsBiomeBait() { this._tag("biome-verified-bait"); }
     markAsBiomeTimeout() { this._tag("biome-verified-timeout"); }
     markAsBiomeNotVerified() { this._tag("biome-not-verified"); }
+    markAsRedundantBiome() { this._tag("redundant-biome-ignored"); }
+    markAsRedundancyBypassed() { this._tag("redundant-biome-bypassed"); }
 
     // ── Join ──────────────────────────────────────────────────────────────────
 
@@ -101,6 +105,10 @@ export class Snipe {
 
     getJoinUri(): string | undefined {
         return SnipeStore.getById(this.id)?.joinUri;
+    }
+
+    getRawMessageContent(): string {
+        return SnipeStore.getById(this.id)?.processedMessageText ?? "";
     }
 
     // ── Interno ───────────────────────────────────────────────────────────────

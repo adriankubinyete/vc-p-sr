@@ -200,18 +200,22 @@ function isJoinLocked(trigger: Trigger) {
 let _unsubscribeBiomeDetection: (() => void) | null = null;
 
 function _watchForBiomeEnd(snipe: Snipe, log: Logger): void {
-    const expected = (snipe.trigger.biome?.detectionKeyword || snipe.trigger.name).toLowerCase();
+    const activeBiome = (snipe.trigger.biome?.detectionKeyword || snipe.trigger.name).toLowerCase();
+    log.info(`[${snipe.trigger.name}] Watching for biome to end.`);
 
-    log.debug(`[${snipe.trigger.name}] Waiting for biome to end... Expecting: "${expected}"`);
-
-    const unsubChange = BiomeDetector.on("biomeChanged", ({ to }) => {
+    const unsubChange = BiomeDetector.on("biomeChanged", ({ from, to }) => {
+        if (from?.toLowerCase() !== activeBiome) {
+            log.debug(`[${snipe.trigger.name}] Biome changed from "${from}" to "${to}" — skipping because it's not the expected trigger biome (${activeBiome}).`);
+            return;
+        }
         log.info(`[${snipe.trigger.name}] Biome ended (changed to "${to}") — releasing lock.`);
         JoinLockStore.release();
         unsubChange();
         unsubClear();
     });
 
-    const unsubClear = BiomeDetector.on("biomeCleared", () => {
+    const unsubClear = BiomeDetector.on("biomeCleared", ({ from }) => {
+        if (from.toLowerCase() !== activeBiome) return;
         log.info(`[${snipe.trigger.name}] Biome ended (disconnected) — releasing lock.`);
         JoinLockStore.release();
         unsubChange();

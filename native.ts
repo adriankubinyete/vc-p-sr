@@ -50,6 +50,17 @@ export interface LogEntry {
 }
 
 
+// stuff
+
+export async function sendWebhook(_: IpcMainInvokeEvent, url: string, body: string): Promise<void> {
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+}
+
 // ─── Roblox: abrir URI ────────────────────────────────────────────────────────
 
 /**

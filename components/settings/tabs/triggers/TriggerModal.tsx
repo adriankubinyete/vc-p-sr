@@ -15,6 +15,7 @@ import { settings } from "../../../../settings";
 import {
     addTrigger,
     DEFAULT_BIOME,
+    DEFAULT_FORWARDING,
     deleteTrigger,
     makeDefaultTrigger,
     Trigger,
@@ -647,7 +648,7 @@ function ConditionsTab({ conditions, onChange }: { conditions: TriggerConditions
 
             <p style={S.sectionTitle}>Mention Roles</p>
             <p style={S.sectionDescription}>Match if the message pings any of these roles. Leave empty to skip this check.<br />
-    <strong>If both keywords and roles are configured, either one is enough to match.</strong></p>
+                <strong>If both keywords and roles are configured, either one is enough to match.</strong></p>
             <RoleChipInput roles={conditions.mentionRoles} onChange={roles => onChange({ ...conditions, mentionRoles: roles })} />
 
         </div>
@@ -786,6 +787,31 @@ function AdvancedTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: 
                 onChange={ids => patch({ conditions: { ...conditions, ignoredGuilds: ids } })}
             />
 
+            <p style={S.sectionTitle}>Redirects</p>
+            <p style={S.noteDanger}>It is <strong>strongly</strong> advised to not overuse this setting. This could lead to API spam. Ask yourself, do you <strong>really</strong> need this?</p>
+            <SwitchField
+                label="Enable forwarding"
+                hint="Re-send this match to a Discord webhook when triggered."
+                value={draft.forwarding?.enabled ?? false}
+                onChange={v => patch({ forwarding: { ...DEFAULT_FORWARDING, ...draft.forwarding, enabled: v } })}
+            />
+
+            {draft.forwarding?.enabled && <>
+                <SwitchField
+                    label="Early forward"
+                    hint="Forward first, join later."
+                    value={draft.forwarding.earlyForward}
+                    onChange={v => patch({ forwarding: { ...draft.forwarding!, earlyForward: v } })}
+                />
+                <TextField
+                    label="Webhook URL"
+                    hint="The Discord webhook URL to forward matches to."
+                    value={draft.forwarding.webhookUrl}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    onChange={v => patch({ forwarding: { ...draft.forwarding!, webhookUrl: v } })}
+                />
+            </>}
+
         </div>
     );
 }
@@ -851,6 +877,12 @@ function TriggerModal({ modalProps, trigger }: TriggerModalProps) {
         modalProps.onClose();
     };
 
+    const handleCopy = () => {
+        const { id, ...rest } = trigger!;
+        navigator.clipboard.writeText(JSON.stringify([rest], null, 2));
+        showToast("Trigger copied to clipboard!", Toasts.Type.SUCCESS);
+    };
+
     return (
         <ModalRoot {...modalProps} size={ModalSize.MEDIUM}>
 
@@ -877,14 +909,19 @@ function TriggerModal({ modalProps, trigger }: TriggerModalProps) {
             </ModalContent>
 
             <ModalFooter separator>
-                {isEditing && (
-                    <Button variant="dangerPrimary" onClick={handleDelete} style={{ marginLeft: "8px" }}>
-                        Delete
-                    </Button>
-                )}
-                <Button variant="primary" disabled={!isValid} onClick={handleSave} style={{ marginLeft: "8px" }}>
+                <Button variant="positive" disabled={!isValid} onClick={handleSave} style={{ marginLeft: "8px" }}>
                     {isEditing ? "Save" : "Add"}
                 </Button>
+                {isEditing && (
+                    <>
+                        <Button variant="dangerPrimary" onClick={handleDelete} style={{ marginLeft: "8px" }}>
+                            Delete
+                        </Button>
+                        <Button variant="link" onClick={handleCopy} style={{ marginLeft: "8px" }}>
+                            Copy
+                        </Button>
+                    </>
+                )}
             </ModalFooter>
 
         </ModalRoot>

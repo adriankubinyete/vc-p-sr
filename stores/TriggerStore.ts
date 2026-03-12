@@ -59,6 +59,12 @@ export interface TriggerBiome {
     skipRedundantJoin: boolean;
 }
 
+export interface TriggerForwarding {
+    enabled: boolean;
+    earlyForward: boolean;
+    webhookUrl: string;
+}
+
 export interface Trigger {
     id: string;
     type: TriggerType;
@@ -67,6 +73,7 @@ export interface Trigger {
     iconUrl: string;
     state: TriggerState;
     conditions: TriggerConditions;
+    forwarding?: TriggerForwarding;
     biome?: TriggerBiome;
 }
 
@@ -106,6 +113,12 @@ export const DEFAULT_BIOME: TriggerBiome = {
     skipRedundantJoin: true,
 };
 
+export const DEFAULT_FORWARDING: TriggerForwarding = {
+    enabled: false,
+    earlyForward: false,
+    webhookUrl: "",
+};
+
 export function makeDefaultTrigger(type: TriggerType = "BIOME"): Omit<Trigger, "id"> {
     const base: Omit<Trigger, "id"> = {
         type,
@@ -114,6 +127,7 @@ export function makeDefaultTrigger(type: TriggerType = "BIOME"): Omit<Trigger, "
         iconUrl: "",
         state: { ...DEFAULT_TRIGGER_STATE },
         conditions: { ...DEFAULT_CONDITIONS },
+        forwarding: { ...DEFAULT_FORWARDING },
     };
 
     if (type !== "MERCHANT") {
@@ -166,6 +180,11 @@ function migrateTrigger(raw: any): Trigger {
             joinlockDuration: raw.state?.joinlockDuration ?? DEFAULT_TRIGGER_STATE.joinlockDuration,
             priority: raw.state?.priority ?? DEFAULT_TRIGGER_STATE.priority,
         },
+        forwarding: {
+            enabled: raw.forwarding?.enabled ?? DEFAULT_FORWARDING.enabled,
+            earlyForward: raw.forwarding?.earlyForward ?? DEFAULT_FORWARDING.earlyForward,
+            webhookUrl: raw.forwarding?.webhookUrl ?? DEFAULT_FORWARDING.webhookUrl,
+        }
     };
 }
 

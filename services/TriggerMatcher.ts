@@ -5,11 +5,12 @@
  */
 
 // import { Logger } from "@utils/Logger";
+import { Logger } from "@utils/Logger";
 import { Message } from "@vencord/discord-types";
 
 import { KeywordSet, Trigger } from "../stores/TriggerStore";
 
-// const logger = new Logger("SolRadar.TriggerMatcher");
+const logger = new Logger("SolRadar.TriggerMatcher");
 
 // ─── Helpers de matching ──────────────────────────────────────────────────────
 
@@ -107,7 +108,7 @@ export interface MatchResult {
 export function getMatchingTrigger(message: Message, activeTriggers: Trigger[]): MatchResult {
     const results = activeTriggers.map(t => evaluateTrigger(message, t));
 
-    // Log de rejeições
+    // rejection logs. uncomment this if you ever need to debug misbehaving triggers
     // for (const r of results) {
     //     if (!r.matched)
     //         logger.debug(`Trigger "${r.trigger.name}" rejected: ${r.reason}`);

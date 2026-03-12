@@ -24,7 +24,7 @@ import { settings } from "./settings";
 import { JoinLockStore } from "./stores/JoinLockStore";
 import { SnipeMetrics, SnipeStore } from "./stores/SnipeStore";
 import { getActiveTriggers, Trigger, TriggerType } from "./stores/TriggerStore";
-import { parseCsv } from "./utils";
+import { parseCsv, sendWebhook } from "./utils";
 
 const logger = new Logger("SolRadar");
 const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("./native")>;
@@ -35,6 +35,7 @@ function flattenEmbeds(message: Message): void {
     if (!settings.store.flattenEmbeds || !message.embeds.length) return;
     let flattened = message.content;
     for (const embed of message.embeds) {
+        if (embed.type !== "rich") continue; // only flatten rich embeds
         // @ts-ignore — campos sem prefixo "raw" no tipo, mas presentes em runtime
         if (embed.title) flattened += ` ${embed.title}`;
         // @ts-ignore
@@ -456,6 +457,40 @@ function notify(snipe: Snipe, log: Logger): void {
     log.info(`[${snipe.trigger.name}] Notified: #${snipe.channel.name} @ ${snipe.guild.name}`);
 }
 
+// ─── forward stuff ──────────────────────────────────────────────────────────────
+
+async function forwardSnipe(snipe: Snipe, log: Logger): Promise<void> {
+    const { webhookUrl } = snipe.trigger.forwarding!;
+    if (!webhookUrl) {
+        log.warn(`[${snipe.trigger.name}] Forwarding enabled but no webhook URL configured.`);
+        return;
+    }
+
+    log.info(`[${snipe.trigger.name}] Forwarding to webhook...`);
+
+    const body = JSON.stringify({
+        content: null,
+        embeds: [{
+            title: `🎯 ${snipe.trigger.name} - Click to join link`,
+            description: `Forwarded from <#${snipe.channel.id}> (${snipe.guild.name})\n[🔗 Server Link](${snipe.link.link})`,
+            url: snipe.link.link,
+            fields: [
+                { name: "Posted by", value: "@" + snipe.message.author.username || "Unknown", inline: true },
+                { name: "Trigger", value: snipe.trigger.name, inline: true },
+            ],
+            color: 0x5865f2,
+            timestamp: new Date().toISOString(),
+        }],
+    });
+
+    try {
+        await sendWebhook(webhookUrl, body);
+        log.info(`[${snipe.trigger.name}] Forward successful.`);
+    } catch (err) {
+        log.error(`[${snipe.trigger.name}] Forward failed: ${(err as Error).message}`);
+    }
+}
+
 // ─── orchestration ─────────────────────────────────────────────────────────────
 
 async function handleMessage(message: Message, channel: Channel, guild: Guild, tMessageReceived: number): Promise<void> {
@@ -478,9 +513,20 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
 
     const snipe = Snipe.create(message, link, trigger, channel, guild, tMessageReceived);
 
+    // early forward
+    if (snipe.trigger.forwarding?.enabled && snipe.trigger.forwarding.earlyForward) {
+        log.info(`[${snipe.trigger.name}] Forwarding early...`);
+        await forwardSnipe(snipe, log);
+    }
+
     if (shouldJoin(snipe, log)) await join(snipe, log);
     if (shouldNotify(snipe)) notify(snipe, log);
 
+    // late forward
+    if (snipe.trigger.forwarding?.enabled && !snipe.trigger.forwarding.earlyForward) {
+        log.info(`[${snipe.trigger.name}] Forwarding late...`);
+        await forwardSnipe(snipe, log);
+    }
 }
 
 // ─── plugin ───────────────────────────────────────────────────────────────────

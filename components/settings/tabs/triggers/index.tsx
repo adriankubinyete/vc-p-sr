@@ -7,7 +7,7 @@
 import { Button } from "@components/Button";
 import { Paragraph } from "@components/Paragraph";
 import { Logger } from "@utils/Logger";
-import { React, showToast, TextInput, Toasts, useEffect, useRef, useState } from "@webpack/common";
+import { Alerts, React, showToast, TextInput, Toasts, useEffect, useRef, useState } from "@webpack/common";
 
 import {
     deleteTrigger,
@@ -306,6 +306,7 @@ function TriggerCard({
     const initial = trigger.name.charAt(0).toUpperCase();
     const [hovered, setHovered] = useState(false);
     const { enabled, autojoin, notify, joinlock, joinlockDuration, priority } = trigger.state;
+    const { forwarding } = trigger;
     const { bypassMonitoredOnly, bypassIgnoredChannels, bypassIgnoredGuilds, bypassMatchAmbiguity, bypassLinkVerification } = trigger.conditions;
     const hasAnyBypass = bypassMonitoredOnly || bypassIgnoredChannels || bypassIgnoredGuilds || bypassMatchAmbiguity || bypassLinkVerification;
 
@@ -393,6 +394,7 @@ function TriggerCard({
                         />
                     );
                 })()}
+                {(forwarding?.enabled && forwarding.webhookUrl.trim() !== "") && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "blue" : "muted"} size="xs" emoji="➡️" iconOnly title={"This trigger will forward the messages to a webhook"} />}
             </div>
         </div>
     );
@@ -470,7 +472,19 @@ export function TriggersTab() {
     const [typeFilter, setTypeFilter] = useState<TriggerType | "all">("all");
 
     useEffect(() => {
-        const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(true); };
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Shift") setShiftHeld(true);
+
+            // // handle pasting
+            // if (e.key === "v" && (e.ctrlKey || e.metaKey)) {
+            //     navigator.clipboard.readText().then(text => {
+            //         if (!text.trim()) return;
+            //         importTriggersFromJson(text, "merge").then(result => {
+            //             if (result.ok) showToast(`Imported ${result.imported} trigger(s) from clipboard!`, Toasts.Type.SUCCESS);
+            //         });
+            //     }).catch(() => { });
+            // }
+        };
         const onKeyUp = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
         const onBlur = () => setShiftHeld(false);
         window.addEventListener("keydown", onKeyDown);
@@ -491,17 +505,88 @@ export function TriggersTab() {
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        e.target.value = "";
+
         const reader = new FileReader();
         reader.onload = async ev => {
-            const result = await importTriggersFromJson(ev.target?.result as string, "merge");
-            if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
-            else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
+            const json = ev.target?.result as string;
+
+            Alerts.show({
+                title: "Import Triggers",
+                body: (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <Paragraph>
+                            How would you like to import these triggers?<br />
+                            <br />
+                            <strong>Add as new</strong> — imported triggers are added alongside your existing ones.<br />
+                            <br />
+                            <strong>Replace</strong> — your current triggers are deleted and replaced with the imported ones.
+                        </Paragraph>
+                        <div style={{ display: "flex", flexDirection: "row", gap: 8, width: "100%" }}>
+                            <Button
+                                variant="positive"
+                                style={{ flex: 1 }}
+                                onClick={() => {
+                                    Alerts.close();
+                                    importTriggersFromJson(json, "merge").then(result => {
+                                        if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
+                                        else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
+                                    });
+                                }}
+                            >
+                                Add as new
+                            </Button>
+                            <Button
+                                variant="dangerPrimary"
+                                style={{ flex: 1 }}
+                                onClick={() => {
+                                    Alerts.close();
+                                    importTriggersFromJson(json, "replace").then(result => {
+                                        if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
+                                        else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
+                                    });
+                                }}
+                            >
+                                Replace
+                            </Button>
+                        </div>
+                    </div>
+                ),
+                confirmText: "Cancel",
+            });
         };
         reader.readAsText(file);
-        e.target.value = "";
     };
 
     const handleExport = () => {
+        const triggersWithWebhooks = triggers.filter(t => t.forwarding?.webhookUrl?.trim());
+
+        if (triggersWithWebhooks.length > 0) {
+            const triggerList = triggersWithWebhooks.map(t => `• ${t.name}`).join("\n");
+
+            Alerts.show({
+                title: "Hold on!",
+                body: (
+                    <Paragraph>
+                        The following triggers have a webhook URL configured:
+                        <pre style={{ margin: "8px 0", color: "var(--text-muted)" }}>{triggerList}</pre>
+                        Exporting will include these URLs in plain text. Are you sure you want to proceed?
+                    </Paragraph>
+                ),
+                confirmText: "Export anyway",
+                cancelText: "Cancel",
+                onConfirm: () => {
+                    try {
+                        downloadTriggersJson();
+                        showToast("Successfully exported triggers!", Toasts.Type.SUCCESS);
+                    } catch (error) {
+                        showToast(`Failed to export triggers: ${error}`, Toasts.Type.FAILURE);
+                    }
+                },
+            });
+            return;
+        }
+
         try {
             downloadTriggersJson();
             showToast("Successfully exported triggers!", Toasts.Type.SUCCESS);

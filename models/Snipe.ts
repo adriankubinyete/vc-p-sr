@@ -20,6 +20,7 @@ import { RobloxLink, Trigger } from "../types";
 export class Snipe {
     readonly id: number;
     readonly trigger: Trigger;
+    readonly message: Message;
     readonly channel: Channel;
     readonly guild: Guild;
     readonly link: RobloxLink;
@@ -29,12 +30,14 @@ export class Snipe {
     private constructor(
         id: number,
         trigger: Trigger,
+        message: Message,
         channel: Channel,
         guild: Guild,
         link: RobloxLink,
         tMessageReceived: number,
     ) {
         this.id = id;
+        this.message = message;
         this.trigger = trigger;
         this.channel = channel;
         this.guild = guild;
@@ -68,7 +71,7 @@ export class Snipe {
             joinUri: buildJoinUri(link),
         });
 
-        return new Snipe(id, trigger, channel, guild, link, tMessageReceived);
+        return new Snipe(id, trigger, message, channel, guild, link, tMessageReceived);
     }
 
     // ── Link ──────────────────────────────────────────────────────────────────

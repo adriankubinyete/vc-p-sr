@@ -60,9 +60,25 @@ export interface TriggerBiome {
 }
 
 export interface TriggerForwarding {
-    enabled: boolean;
-    earlyForward: boolean;
+    /** Per-trigger webhook URL. Leave empty to fall back to the global webhook. */
     webhookUrl: string;
+
+    onMatch: {
+        enabled: boolean;
+        /**
+         * Forward as early as possible (before joining).
+         * Can slightly impact join speed.
+         */
+        early: boolean;
+    };
+
+    /**
+     * Only available for trigger types that support biome detection.
+     * Fires after the Roblox log confirms the biome.
+     */
+    onDetection: {
+        enabled: boolean;
+    };
 }
 
 export interface Trigger {
@@ -73,7 +89,7 @@ export interface Trigger {
     iconUrl: string;
     state: TriggerState;
     conditions: TriggerConditions;
-    forwarding?: TriggerForwarding;
+    forwarding: TriggerForwarding;
     biome?: TriggerBiome;
 }
 
@@ -114,9 +130,14 @@ export const DEFAULT_BIOME: TriggerBiome = {
 };
 
 export const DEFAULT_FORWARDING: TriggerForwarding = {
-    enabled: false,
-    earlyForward: false,
     webhookUrl: "",
+    onMatch: {
+        enabled: false,
+        early: false,
+    },
+    onDetection: {
+        enabled: false,
+    },
 };
 
 export function makeDefaultTrigger(type: TriggerType = "BIOME"): Omit<Trigger, "id"> {
@@ -181,9 +202,14 @@ function migrateTrigger(raw: any): Trigger {
             priority: raw.state?.priority ?? DEFAULT_TRIGGER_STATE.priority,
         },
         forwarding: {
-            enabled: raw.forwarding?.enabled ?? DEFAULT_FORWARDING.enabled,
-            earlyForward: raw.forwarding?.earlyForward ?? DEFAULT_FORWARDING.earlyForward,
             webhookUrl: raw.forwarding?.webhookUrl ?? DEFAULT_FORWARDING.webhookUrl,
+            onMatch: {
+                enabled: raw.forwarding?.onMatch?.enabled ?? DEFAULT_FORWARDING.onMatch.enabled,
+                early: raw.forwarding?.onMatch?.early ?? DEFAULT_FORWARDING.onMatch.early,
+            },
+            onDetection: {
+                enabled: raw.forwarding?.onDetection?.enabled ?? DEFAULT_FORWARDING.onDetection.enabled,
+            },
         }
     };
 }
@@ -236,8 +262,12 @@ export function getActiveTriggers(): Trigger[] {
     return _triggers.filter(t => t.state.enabled);
 }
 
-export function getTriggersWithWebhook(): Trigger[] {
-    return _triggers.filter(t => t.state.enabled && t.forwarding?.enabled);
+export function getTriggersWithOnMatchForwarding(): Trigger[] {
+    return _triggers.filter(t => t.state.enabled && t.forwarding.onMatch.enabled);
+}
+
+export function getTriggersWithOnDetectionForwarding(): Trigger[] {
+    return _triggers.filter(t => t.state.enabled && t.forwarding.onDetection.enabled);
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────

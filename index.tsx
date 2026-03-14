@@ -23,7 +23,7 @@ import { getMatchingTrigger } from "./services/TriggerMatcher";
 import { settings } from "./settings";
 import { JoinLockStore } from "./stores/JoinLockStore";
 import { SnipeMetrics, SnipeStore } from "./stores/SnipeStore";
-import { getActiveTriggers, getTriggersWithWebhook, Trigger, TriggerType } from "./stores/TriggerStore";
+import { getActiveTriggers, Trigger, TriggerType } from "./stores/TriggerStore";
 import { parseCsv, sendWebhook } from "./utils";
 
 const logger = new Logger("SolRadar");
@@ -268,6 +268,12 @@ function startBiomeDetection(snipe: Snipe, log: Logger): void {
                 body: `Detected in ${elapsed}ms`,
                 icon: snipe.trigger.iconUrl,
             });
+            if (snipe.trigger.forwarding.onDetection.enabled) {
+                log.info(`[${snipe.trigger.name}] Forwarding on detection...`);
+                forwardSnipe(snipe, log, "detection").catch(err =>
+                    log.error(`[${snipe.trigger.name}] Forward on detection failed: ${(err as Error).message}`)
+                );
+            }
         } else {
             snipe.markAsBiomeBait();
             unsubChange();
@@ -464,7 +470,10 @@ function isValidMessage(message: Message, log: Logger): boolean {
 
     // @ts-ignore - ts is drunk, I think the type is not updated
     const webhook_id = message.webhook_id ?? message.author.id ?? undefined;
-    const isASelfForward = getTriggersWithWebhook().some(t => t.forwarding?.webhookUrl?.includes(webhook_id!));
+    const isASelfForward = getActiveTriggers().some(t => {
+        const url = t.forwarding.webhookUrl || settings.store.globalWebhookUrl;
+        return url && webhook_id && url.includes(webhook_id);
+    });
 
     if (isASelfForward) {
         log.warn("This message is a self-forward!");
@@ -483,26 +492,32 @@ function isValidMessage(message: Message, log: Logger): boolean {
     return true;
 }
 
-async function forwardSnipe(snipe: Snipe, log: Logger): Promise<void> {
-    const { webhookUrl } = snipe.trigger.forwarding!;
+type ForwardKind = "match" | "detection";
+
+async function forwardSnipe(snipe: Snipe, log: Logger, kind: ForwardKind = "match"): Promise<void> {
+    const webhookUrl = snipe.trigger.forwarding.webhookUrl || settings.store.globalWebhookUrl;
     if (!webhookUrl) {
-        log.warn(`[${snipe.trigger.name}] Forwarding enabled but no webhook URL configured.`);
+        log.warn(`[${snipe.trigger.name}] Forwarding enabled but no webhook URL configured (trigger or global).`);
         return;
     }
 
-    log.info(`[${snipe.trigger.name}] Forwarding to webhook...`);
+    const isDetection = kind === "detection";
+    const hasBiome = snipe.trigger.type !== "MERCHANT";
 
     const body = JSON.stringify({
         content: null,
         embeds: [{
-            title: `🎯 ${snipe.trigger.name} (click to join)`,
+            title: isDetection
+                ? `✅ ${snipe.trigger.name} — Biome Confirmed`
+                : `🎯 ${snipe.trigger.name} (click to join)`,
             description: `[🔗 Server Link](${snipe.link.link})`,
             url: snipe.link.link,
             fields: [
                 { name: "Sent by", value: `<@${snipe.message.author.id}>` || "Unknown", inline: true },
                 { name: "Sent in", value: `https://discord.com/channels/${snipe.guild.id}/${snipe.channel.id}/${snipe.message.id}`, inline: true },
+                ...(hasBiome ? [{ name: "Biome", value: isDetection ? "✅ Real" : "⚠️ Not verified", inline: true }] : []),
             ],
-            color: 0x5865f2,
+            color: isDetection ? 0x57f287 : 0x5865f2,
             timestamp: new Date().toISOString(),
             footer: { text: "SolRadar" },
         }],
@@ -510,7 +525,7 @@ async function forwardSnipe(snipe: Snipe, log: Logger): Promise<void> {
 
     try {
         await sendWebhook(webhookUrl, body);
-        log.info(`[${snipe.trigger.name}] Forward successful.`);
+        log.info(`[${snipe.trigger.name}] Forward successful (${kind}).`);
     } catch (err) {
         log.error(`[${snipe.trigger.name}] Forward failed: ${(err as Error).message}`);
     }
@@ -541,7 +556,7 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
     const snipe = Snipe.create(message, link, trigger, channel, guild, tMessageReceived);
 
     // early forward
-    if (snipe.trigger.forwarding?.enabled && snipe.trigger.forwarding.earlyForward) {
+    if (snipe.trigger.forwarding.onMatch.enabled && snipe.trigger.forwarding.onMatch.early) {
         log.info(`[${snipe.trigger.name}] Forwarding early...`);
         await forwardSnipe(snipe, log);
     }
@@ -550,7 +565,7 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
     if (shouldNotify(snipe)) notify(snipe, log);
 
     // late forward
-    if (snipe.trigger.forwarding?.enabled && !snipe.trigger.forwarding.earlyForward) {
+    if (snipe.trigger.forwarding.onMatch.enabled && !snipe.trigger.forwarding.onMatch.early) {
         log.info(`[${snipe.trigger.name}] Forwarding late...`);
         await forwardSnipe(snipe, log);
     }

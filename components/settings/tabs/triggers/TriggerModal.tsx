@@ -15,12 +15,12 @@ import { settings } from "../../../../settings";
 import {
     addTrigger,
     DEFAULT_BIOME,
-    DEFAULT_FORWARDING,
     deleteTrigger,
     makeDefaultTrigger,
     Trigger,
     TriggerBiome,
     TriggerConditions,
+    TriggerForwarding,
     TriggerType,
     updateTrigger,
 } from "../../../../stores/TriggerStore";
@@ -33,7 +33,7 @@ const GuildStore = findByPropsLazy("getGuild", "getGuildCount");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type InnerTab = "general" | "conditions" | "biome" | "advanced";
+type InnerTab = "general" | "conditions" | "biome" | "forwarding" | "advanced";
 
 const TRIGGER_TYPE_OPTIONS = [
     { label: "Rare Biome", value: "RARE_BIOME" },
@@ -548,6 +548,12 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 
+            <p style={S.sectionTitle}>Behavior</p>
+
+            <SwitchField label="Enabled" hint="Whether this trigger is active." value={state.enabled} onChange={v => patch({ state: { ...state, enabled: v } })} />
+            <SwitchField label="Automatic Join" hint="Automatically join the match when triggered." value={state.autojoin} onChange={v => patch({ state: { ...state, autojoin: v } })} />
+            <SwitchField label="Notification" hint="Show a notification when matched." value={state.notify} onChange={v => patch({ state: { ...state, notify: v } })} />
+
             <p style={S.sectionTitle}>Details</p>
 
             <SelectField
@@ -585,38 +591,34 @@ function GeneralTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: P
                 <p style={{ ...S.noteSuccess, fontSize: 14 }}>✅ Your image will most likely load.</p>
             }
 
-            <p style={S.sectionTitle}>Behavior</p>
-
-            <SwitchField label="Enabled" hint="Whether this trigger is active." value={state.enabled} onChange={v => patch({ state: { ...state, enabled: v } })} />
-            <SwitchField label="Auto-join" hint="Automatically join the match when triggered." value={state.autojoin} onChange={v => patch({ state: { ...state, autojoin: v } })} />
-            <SwitchField label="Notify" hint="Show a notification when matched." value={state.notify} onChange={v => patch({ state: { ...state, notify: v } })} />
-
             <p style={S.sectionTitle}>Join Lock</p>
 
-            <p style={S.sectionDescription}>This section sets the join lock for this trigger, preventing higher or equal priority triggers from auto-joining for a set duration.<br />This is useful for avoiding re-joins due to repeated messages, which can send you to the server's queue.</p>
+            <p style={S.sectionDescription}>This section sets the join lock for this trigger, preventing higher or equal priority triggers from auto-joining for a set duration. This is useful for avoiding re-joins due to repeated messages, which can send you to the server's queue.</p>
 
             <SwitchField
                 label="Join lock"
-                hint="Prevent any triggers of priority equal to or higher than this trigger's priority from being auto-joined."
+                hint="Prevent auto-joins from triggers of priority equal to or higher than this'."
                 value={state.joinlock}
                 onChange={v => patch({ state: { ...state, joinlock: v } })}
             />
-            <TextField
-                label="Join Priority"
-                hint="Join priority. Lower number means higher priority. Defaults to 10."
-                value={String(state.priority)}
-                placeholder="e.g. 10"
-                type="number"
-                onChange={v => patch({ state: { ...state, priority: Number(v) } })}
-            />
             {state.joinlock && (
-                <TextField
-                    label="Duration (seconds)"
-                    value={String(state.joinlockDuration)}
-                    hint="How long to prevent joins. In case of biomes, this is recommended to be set as ~80% of the biome's duration."
-                    type="number"
-                    onChange={v => patch({ state: { ...state, joinlockDuration: Number(v) } })}
-                />
+                <>
+                    <TextField
+                        label="Join Priority"
+                        hint="Lower number means higher priority. Defaults to 10."
+                        value={String(state.priority)}
+                        placeholder="e.g. 10"
+                        type="number"
+                        onChange={v => patch({ state: { ...state, priority: Number(v) } })}
+                    />
+                    <TextField
+                        label="Join Lock duration (seconds)"
+                        value={String(state.joinlockDuration)}
+                        hint="How long to prevent joins after matching this trigger."
+                        type="number"
+                        onChange={v => patch({ state: { ...state, joinlockDuration: Number(v) } })}
+                    />
+                </>
             )}
 
         </div>
@@ -787,30 +789,99 @@ function AdvancedTab({ draft, patch }: { draft: Omit<Trigger, "id">; patch: (p: 
                 onChange={ids => patch({ conditions: { ...conditions, ignoredGuilds: ids } })}
             />
 
-            <p style={S.sectionTitle}>Redirects</p>
-            <p style={S.noteDanger}>It is <strong>strongly</strong> advised to not overuse this setting. This could lead to API spam. Ask yourself, do you <strong>really</strong> need this?</p>
-            <SwitchField
-                label="Enable forwarding"
-                hint="Re-send this match to a Discord webhook when triggered."
-                value={draft.forwarding?.enabled ?? false}
-                onChange={v => patch({ forwarding: { ...DEFAULT_FORWARDING, ...draft.forwarding, enabled: v } })}
+        </div>
+    );
+}
+
+// ─── Tab: Forwarding ─────────────────────────────────────────────────────────
+
+function ForwardingTab({ forwarding, onChange, showBiome }: {
+    forwarding: TriggerForwarding;
+    onChange: (f: TriggerForwarding) => void;
+    showBiome: boolean;
+}) {
+    const { globalWebhookUrl } = settings.use([
+        "globalWebhookUrl",
+    ]);
+
+    const globalWebhook = globalWebhookUrl || "";
+
+    const patch = (p: Partial<TriggerForwarding>) => onChange({ ...forwarding, ...p });
+    const hasEffectiveWebhook = forwarding.webhookUrl.trim() || globalWebhook.trim();
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ ...S.noteWarning, fontSize: 14 }}>
+                ⚠️ This section is intended for advanced users only. Forwarding is <strong>not required</strong> for
+                normal use — most users should leave this unconfigured. Sending webhooks on every match can trigger
+                Discord's rate limits and get your webhook permanently disabled. Only set this up if you know exactly
+                what you are doing.
+            </p>
+
+            {/* ── Webhook ── */}
+            <p style={S.sectionTitle}>Webhook</p>
+            <p style={S.sectionDescription}>
+                Where to send forwarded messages. Leave blank to use the global webhook configured in the plugin settings.
+            </p>
+
+            <TextField
+                label="Webhook URL"
+                hint={
+                    globalWebhook
+                        ? `Leave empty to use global webhook: ${globalWebhook.slice(0, 48)}…`
+                        : "No global webhook configured. Set one in plugin settings, or provide one here."
+                }
+                value={forwarding.webhookUrl}
+                placeholder="https://discord.com/api/webhooks/…"
+                onChange={v => patch({ webhookUrl: v })}
             />
 
-            {draft.forwarding?.enabled && <>
+            {!hasEffectiveWebhook && (
+                <p style={S.noteWarning}>
+                    No webhook is configured. Forwarding will do nothing even when enabled. Set a webhook here or in plugin settings.
+                </p>
+            )}
+
+            {/* ── On Match ── */}
+            <p style={S.sectionTitle}>On Match</p>
+
+            <SwitchField
+                label="Enabled"
+                hint="Fires when the trigger matches"
+                value={forwarding.onMatch.enabled}
+                onChange={v => patch({ onMatch: { ...forwarding.onMatch, enabled: v } })}
+            />
+
+            {forwarding.onMatch.enabled && (
                 <SwitchField
                     label="Early forward"
-                    hint="Forward as soon as possible. Can impact your join speed."
-                    value={draft.forwarding.earlyForward}
-                    onChange={v => patch({ forwarding: { ...draft.forwarding!, earlyForward: v } })}
+                    hint="Forward as early as possible. Can slightly impact join speed."
+                    value={forwarding.onMatch.early}
+                    onChange={v => patch({ onMatch: { ...forwarding.onMatch, early: v } })}
                 />
-                <TextField
-                    label="Webhook URL"
-                    hint="The Discord webhook URL to forward matches to."
-                    value={draft.forwarding.webhookUrl}
-                    placeholder="https://discord.com/api/webhooks/..."
-                    onChange={v => patch({ forwarding: { ...draft.forwarding!, webhookUrl: v } })}
+            )}
+
+            {/* ── On Detection (biome types only) ── */}
+            {showBiome && <>
+                <p style={S.sectionTitle}>On Detection</p>
+
+                <SwitchField
+                    label="Enabled"
+                    hint="Fires when your detection confirms the biome is real."
+                    value={forwarding.onDetection.enabled}
+                    onChange={v => patch({ onDetection: { enabled: v } })}
                 />
+                <p style={S.note}>
+                    For this to work, you obviously need to have biome detection set up in settings, and you need to join the biome to actually do the detection. It is impossible to verify if a biome is real or not without joining it.
+                </p>
             </>}
+
+            {!showBiome && (
+                <p style={S.note}>
+                    On-detection forwarding is only available for trigger types that support biome detection
+                    (Rare Biome, Event Biome, Biome, Weather, Custom).
+                </p>
+            )}
 
         </div>
     );
@@ -858,6 +929,7 @@ function TriggerModal({ modalProps, trigger }: TriggerModalProps) {
         { id: "general", label: "General" },
         { id: "conditions", label: "Conditions" },
         ...(showBiome ? [{ id: "biome" as InnerTab, label: "Biome" }] : []),
+        { id: "forwarding", label: "Forwarding" },
         { id: "advanced", label: "Advanced" },
     ];
     if (innerTab === "biome" && !showBiome) setInnerTab("general");
@@ -906,6 +978,7 @@ function TriggerModal({ modalProps, trigger }: TriggerModalProps) {
                 {innerTab === "conditions" && <ConditionsTab conditions={draft.conditions} onChange={c => patch({ conditions: c })} />}
                 {innerTab === "biome" && draft.biome && <BiomeTab biome={draft.biome} onChange={b => patch({ biome: b })} />}
                 {innerTab === "advanced" && <AdvancedTab draft={draft} patch={patch} />}
+                {innerTab === "forwarding" && <ForwardingTab forwarding={draft.forwarding} onChange={f => patch({ forwarding: f })} showBiome={showBiome} />}
             </ModalContent>
 
             <ModalFooter separator>

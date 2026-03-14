@@ -394,7 +394,7 @@ function TriggerCard({
                         />
                     );
                 })()}
-                {(forwarding?.enabled && forwarding.webhookUrl.trim() !== "") && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "blue" : "muted"} size="xs" emoji="➡️" iconOnly title={"This trigger will forward the messages to a webhook"} />}
+                {(forwarding.onMatch.enabled || forwarding.onDetection.enabled) && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "blue" : "muted"} size="xs" emoji="➡️" iconOnly title={"This trigger will forward the messages to a webhook"} />}
             </div>
         </div>
     );
@@ -559,7 +559,7 @@ export function TriggersTab() {
     };
 
     const handleExport = () => {
-        const triggersWithWebhooks = triggers.filter(t => t.forwarding?.webhookUrl?.trim());
+        const triggersWithWebhooks = triggers.filter(t => t.forwarding.webhookUrl.trim());
 
         if (triggersWithWebhooks.length > 0) {
             const triggerList = triggersWithWebhooks.map(t => `• ${t.name}`).join("\n");

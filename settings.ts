@@ -61,6 +61,11 @@ export const settings = definePluginSettings({
         description: "With this enabled, if an embed footer contains the text 'solradar', it will be ignored. Only disable this if you know what you're doing!",
         default: true
     },
+    globalWebhookUrl: {
+        type: OptionType.STRING,
+        description: "For any setting where you want to send notifications, this webhook URL will be used by default if one wasn't provided in the specific setting.",
+        default: ""
+    },
 
     // ui
     hideInactiveIndicator: {

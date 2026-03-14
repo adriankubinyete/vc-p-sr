@@ -194,7 +194,7 @@ function QuickSetup() {
                                 {step}
                             </span>
                             <div style={{ display: "flex", flexDirection: "column", gap: "0.05rem" }}>
-                                <span style={{ fontSize: "0.85rem", color: "var(--text-normal)", fontWeight: "600" }}>
+                                <span style={{ fontSize: "0.85rem", color: "var(--text-default)", fontWeight: "600" }}>
                                     {title}
                                 </span>
                                 <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: "1.45" }}>
@@ -215,7 +215,7 @@ function CreditCard({ entry }: { entry: CreditEntry; }) {
     const inner = (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: "0.45rem" }}>
-                <span style={{ fontWeight: "600", color: "var(--text-normal)", fontSize: "0.9rem" }}>
+                <span style={{ fontWeight: "600", color: "var(--text-default)", fontSize: "0.9rem" }}>
                     {entry.name}
                 </span>
                 <span
@@ -290,7 +290,7 @@ export function AboutTab() {
                         style={{
                             fontSize: "1.1rem",
                             fontWeight: "700",
-                            color: "var(--text-normal)",
+                            color: "var(--text-default)",
                             letterSpacing: "-0.01em"
                         }}
                     >

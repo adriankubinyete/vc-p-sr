@@ -201,10 +201,12 @@ export async function prepareAdb(data?: string): Promise<{ ok: true; } | { ok: f
 
         if (!adbResult.ok) {
             const error = adbResult.error === "Exit code 1" ? "LDPlayer might be closed" : adbResult.error || "Unknown error";
-            showNotification({
-                title: "⚠️ Failed to launch Roblox on emulator via adb",
-                body: error,
-            });
+            if (!settings.store.omitAdbErrorNotifications) {
+                showNotification({
+                    title: "⚠️ Failed to launch Roblox on emulator via adb",
+                    body: error,
+                });
+            }
             logger.error("Failed to launch Roblox on emulator via adb:", adbResult.error);
             return { ok: false, error };
         }

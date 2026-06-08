@@ -27,6 +27,7 @@ import { isDuplicateLink, markAsSeen } from "./services/SnipeDeduplicator";
 import { settings } from "./settings";
 import { ActiveChannelStore } from "./stores/ActiveChannelStore";
 import { SnipeMetrics } from "./types";
+import { ensureDailyVersionCheck } from "./utils";
 import { PLUGIN_VERSION } from "./version";
 
 const logger = new Logger("SolRadar");
@@ -137,6 +138,8 @@ export default definePlugin({
 
     async start() {
         logger.info("Starting");
+
+        void ensureDailyVersionCheck();
 
         if (settings.store.detectorEnabled) {
             const accounts = (settings.store.detectorAccounts as string ?? "")

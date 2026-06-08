@@ -148,7 +148,8 @@ export function SettingsTab() {
         {
             title: "User Interface",
             entries: [
-                { id: "anonymizeEverything", label: "Anonymize Everything", description: "Hide every information that could lead to identifying the origin of your snipe.", tooltip: "This will hide the author, server, channel, message and logs for each snipe in the history page. You may click to reveal each entry individually." },
+                { id: "anonymizeEverything", label: "Anonymize Everything", description: "Hide every information that could lead to identifying the origin of your snipe. Recommended to keep this enabled if you're going to post screenshots of your snipes.", tooltip: "This will hide the author, server, channel, message and logs for each snipe in the history page. You may click to reveal each entry individually." },
+                { id: "shouldCheckForUpdates", label: "Check for Updates", description: "Check for new versions of SolRadar on startup.", tooltip: "This will check for new versions of SolRadar on startup and display a notification if one is available. Runs once per day." },
             ],
         },
         {

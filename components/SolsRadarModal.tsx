@@ -20,13 +20,12 @@ import { UtilsTab } from "./tabs/utils";
 
 // ─── Definição das tabs ────────────────────────────────────────────────────────
 
-type TabId = "recentJoins" | "triggers" | "settings" | "about" | "dev" | "stats" | "utilities";
+type TabId = "recentJoins" | "triggers" | "settings" | "about" | "dev" | "stats" | "utilities" | "testtab1" | "testtab2" | "testtab3";
 
 interface Tab {
     id: TabId;
     label: string;
     component: React.ComponentType;
-    /** Se true, a tab só aparece quando isDeveloper() retornar true */
     devOnly?: boolean;
 }
 
@@ -36,6 +35,9 @@ const TABS: Tab[] = [
     { id: "settings", label: "Settings", component: SettingsTab },
     { id: "stats", label: "Stats", component: StatsTab },
     { id: "about", label: "About", component: AboutTab },
+    { id: "testtab1", label: "testtab1", component: AboutTab },
+    { id: "testtab2", label: "testtab2", component: AboutTab },
+    { id: "testtab3", label: "testtab3", component: AboutTab },
     { id: "utilities", label: "Utilities", component: UtilsTab },
     { id: "dev", label: "Developer", component: DeveloperTab, devOnly: true },
 ];
@@ -51,52 +53,18 @@ function resolveTab(tab: TabId): TabId {
     return visible.some(t => t.id === tab) ? tab : FALLBACK_TAB;
 }
 
-// ─── Estilos ──────────────────────────────────────────────────────────────────
-
-const styles = {
-    root: {
-        display: "flex",
-        flexDirection: "column" as const,
-        minHeight: 0,
-        height: "100%",
-    },
-    tabBar: {
-        display: "flex",
-        gap: 2,
-        borderBottom: "2px solid var(--background-modifier-accent)",
-        marginBottom: 16,
-    },
-    tabBtn: (active: boolean): React.CSSProperties => ({
-        background: "none",
-        border: "none",
-        borderBottom: active
-            ? "2px solid var(--brand-500)"
-            : "2px solid transparent",
-        marginBottom: -2,
-        padding: "8px 14px",
-        color: active ? "var(--text-default)" : "var(--text-muted)",
-        fontWeight: active ? 600 : 400,
-        cursor: "pointer",
-        fontSize: 14,
-        transition: "color 0.15s, border-color 0.15s",
-    }),
-    content: {
-        flex: 1,
-        minHeight: 0,
-    },
-};
-
 // ─── Modal principal ──────────────────────────────────────────────────────────
 
 interface SolsRadarModalProps {
     modalProps: ModalProps;
     initialTab?: TabId;
 }
-
 export function SolsRadarModal({ modalProps, initialTab }: SolsRadarModalProps) {
     const [activeTab, setActiveTab] = React.useState<TabId>(() =>
         resolveTab(initialTab ?? UIState.get("activeTab"))
     );
+
+    const tabsRef = React.useRef<HTMLDivElement>(null);
 
     const visibleTabs = getVisibleTabs();
     const ActiveComponent = visibleTabs.find(t => t.id === activeTab)!.component;
@@ -118,35 +86,72 @@ export function SolsRadarModal({ modalProps, initialTab }: SolsRadarModalProps) 
                     <ModalCloseButton onClick={modalProps.onClose} />
                 </div>
             </ModalHeader>
-            {/* Tab bar */}
-            <div style={styles.tabBar}>
+
+            <div
+                ref={tabsRef}
+                onWheel={e => {
+                    e.preventDefault();
+                    e.currentTarget.scrollLeft += e.deltaY;
+                }}
+                style={{
+                    display: "flex",
+                    gap: 2,
+                    overflowX: "auto",
+                    overflowY: "hidden",
+                    scrollbarWidth: "none",
+                    borderBottom: "1px solid var(--background-modifier-accent)",
+                    flexShrink: 0,
+                }}
+            >
                 {visibleTabs.map(tab => (
                     <button
                         key={tab.id}
-                        style={styles.tabBtn(activeTab === tab.id)}
                         onClick={() => handleTabChange(tab.id)}
+                        style={{
+                            flexShrink: 0,
+
+                            background: "none",
+                            border: "none",
+
+                            borderBottom: activeTab === tab.id
+                                ? "2px solid var(--brand-500)"
+                                : "2px solid transparent",
+
+                            marginBottom: -1,
+
+                            padding: "8px 14px",
+
+                            color: activeTab === tab.id
+                                ? "var(--text-default)"
+                                : "var(--text-muted)",
+
+                            fontWeight: activeTab === tab.id ? 600 : 400,
+                            cursor: "pointer",
+                            fontSize: 14,
+                            whiteSpace: "nowrap",
+
+                            position: "relative",
+                            zIndex: 1,
+                        }}
                     >
                         {tab.label}
                     </button>
                 ))}
             </div>
-            <ModalContent separator>
-                <div style={styles.root}>
-                    <div style={styles.content}>
-                        <ActiveComponent />
-                    </div>
-                </div>
+
+            <ModalContent
+                separator
+                style={{
+                    overflowX: "hidden",
+                }}
+            >
+                <ActiveComponent />
             </ModalContent>
         </ModalRoot>
     );
 }
 
 // ─── Helper de abertura ───────────────────────────────────────────────────────
-//
-// Use em qualquer lugar:
-//   openSolsRadarModal()               → abre em Recent Joins
-//   openSolsRadarModal("triggers")     → abre direto em Triggers
-//   openSolsRadarModal("settings")     → abre direto em Settings
 
 export const openSolsRadarModal = (initialTab?: TabId) =>
     openModal(p => <SolsRadarModal modalProps={p} initialTab={initialTab} />);

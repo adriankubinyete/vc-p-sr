@@ -204,6 +204,12 @@ export const settings = definePluginSettings({
         default: true,
         hidden: true,
     },
+    shouldCheckForUpdates: {
+        type: OptionType.BOOLEAN,
+        description: "Whether to check for updates. Default: true",
+        default: true,
+        hidden: true,
+    },
 
     // monitoring
     monitoredGuilds: {
@@ -339,4 +345,18 @@ export const settings = definePluginSettings({
         default: 5000,
         restartNeeded: true, // i am NOT gonna hot-reload this
     },
+
+    // internals
+    lastVersionCheck: {
+        type: OptionType.NUMBER,
+        description: "[internal] The last time the plugin checked for updates.",
+        default: 0,
+        hidden: true,
+    },
+    lastKnownPublishedVersion: {
+        type: OptionType.STRING,
+        description: "[internal] The last known published version of the plugin.",
+        default: "",
+        hidden: true,
+    }
 });

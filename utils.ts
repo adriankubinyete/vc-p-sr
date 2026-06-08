@@ -4,10 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { showNotification } from "@api/Notifications";
 import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
 import { AuthenticationStore, showToast as defaultShowToast } from "@webpack/common";
+
+import { settings } from "./settings";
+import { PLUGIN_VERSION } from "./version";
 export const cl = classNameFactory("vc-sora-");
 
 export const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("./native")>;
@@ -135,3 +139,203 @@ export function extractComponentUrls(components: any[]): string[] {
 
 export const redact = (min = 6, max = 14) =>
     "█".repeat(Math.floor(Math.random() * (max - min + 1)) + min);
+
+
+// version control utilitaries
+
+/**
+ * Returns the currently installed plugin version.
+ *
+ * @returns {string} Current plugin version.
+ */
+export function getCurrentVersion(): string {
+    return PLUGIN_VERSION;
+}
+
+/**
+ * Extracts the plugin version from a version.ts file.
+ *
+ * @param {string} source Raw file contents.
+ * @returns {string | null} Extracted version or null if not found.
+ */
+function extractVersion(source: string): string | null {
+    return source.match(
+        /PLUGIN_VERSION\s*=\s*["']([^"']+)["']/
+    )?.[1] ?? null;
+}
+
+/**
+ * Fetches the latest published version from GitLab.
+ *
+ * @returns {Promise<string | null>} Latest published version or null on failure.
+ */
+export async function getLatestPublishedVersion(): Promise<string | null> {
+    const VERSION_URL = "https://gitlab.com/api/v4/projects/80066436/repository/files/version.ts/raw?ref=main";
+    const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+        controller.abort();
+    }, 5000);
+
+    try {
+        const response = await fetch(VERSION_URL, {
+            signal: controller.signal,
+            cache: "no-store"
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        return extractVersion(await response.text());
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+/**
+ * Parses a version string into comparable parts.
+ *
+ * Examples:
+ * - 1.2.3
+ * - 1.2.3-beta
+ * - 0.0.0-batata
+ *
+ * @param {string} version Version string.
+ */
+function parseVersion(version: string) {
+    const [numeric, suffix = ""] = version.split("-", 2);
+
+    return {
+        numbers: numeric.split(".").map(v => Number(v) || 0),
+        suffix
+    };
+}
+
+/**
+ * Returns whether the latest version is newer than the current version.
+ *
+ * Supports version suffixes such as:
+ * - 1.0.0-beta
+ * - 1.0.0-test
+ * - 1.0.0-dev
+ *
+ * Stable releases are considered newer than pre-releases with the same
+ * numeric version.
+ *
+ * @param {string} current Current installed version.
+ * @param {string} latest Latest available version.
+ * @returns {boolean} True if an update is available.
+ */
+export function isVersionNewer(
+    current: string,
+    latest: string
+): boolean {
+    const a = parseVersion(current);
+    const b = parseVersion(latest);
+
+    const length = Math.max(
+        a.numbers.length,
+        b.numbers.length
+    );
+
+    for (let i = 0; i < length; i++) {
+        const currentPart = a.numbers[i] ?? 0;
+        const latestPart = b.numbers[i] ?? 0;
+
+        if (latestPart > currentPart) return true;
+        if (latestPart < currentPart) return false;
+    }
+
+    if (a.suffix && !b.suffix) return true;
+    if (!a.suffix && b.suffix) return false;
+
+    return b.suffix > a.suffix;
+}
+/**
+ * Returns the last successfully fetched published version.
+ *
+ * @returns {string | null} Last known published version.
+ */
+export function getLatestKnownVersion(): string | null {
+    return settings.store.lastKnownPublishedVersion || null;
+}
+
+/**
+ * Returns whether an update is available based on the last successful
+ * version check.
+ *
+ * This function never performs network requests.
+ *
+ * @returns {boolean} True if an update is available.
+ */
+export function hasNewVersionAvailable(): boolean {
+    const latestVersion = getLatestKnownVersion();
+
+    if (!latestVersion) {
+        return false;
+    }
+
+    return isVersionNewer(
+        getCurrentVersion(),
+        latestVersion
+    );
+}
+
+/**
+ * Checks for plugin updates at most once every 24 hours.
+ */
+export async function ensureDailyVersionCheck() {
+    if (!settings.store.shouldCheckForUpdates) {
+        logger.debug("Update checks are disabled.");
+        return;
+    }
+
+    const now = Date.now();
+    const lastCheck = settings.store.lastVersionCheck ?? 0;
+
+    logger.debug(`Last update check: ${lastCheck}`);
+
+    const UPDATE_CHECK_DELAY = 24 * 60 * 60 * 1000; // 24 hours
+
+    if (now - lastCheck < UPDATE_CHECK_DELAY) {
+        logger.debug(
+            `Skipping update check (${Math.floor((now - lastCheck) / 1000)}s since last check).`
+        );
+        return;
+    }
+
+    logger.debug("Checking for updates...");
+
+    const latestVersion = await getLatestPublishedVersion();
+
+    logger.debug(`Latest version: ${latestVersion}`);
+    logger.debug(`Current version: ${getCurrentVersion()}`);
+
+    if (!latestVersion) {
+        logger.debug("Failed to fetch latest version.");
+        return;
+    }
+
+    settings.store.lastKnownPublishedVersion = latestVersion;
+    settings.store.lastVersionCheck = now;
+
+    logger.debug(`Updated lastVersionCheck to ${now}`);
+    logger.debug(`Updated lastKnownPublishedVersion to ${latestVersion}`);
+
+    if (!isVersionNewer(getCurrentVersion(), latestVersion)) {
+        logger.debug("Plugin is already up to date.");
+        return;
+    }
+
+    logger.warn(
+        `A new version of SolRadar is available: ${latestVersion} (current: ${getCurrentVersion()})`
+    );
+
+    showNotification({
+        title: "SoRa :: Update Available!",
+        body: `A new version of SolRadar is available: ${latestVersion} (current: ${getCurrentVersion()})`
+    });
+}

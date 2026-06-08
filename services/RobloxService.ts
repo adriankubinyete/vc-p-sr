@@ -203,7 +203,7 @@ export async function prepareAdb(data?: string): Promise<{ ok: true; } | { ok: f
             const error = adbResult.error === "Exit code 1" ? "LDPlayer might be closed" : adbResult.error || "Unknown error";
             if (!settings.store.omitAdbErrorNotifications) {
                 showNotification({
-                    title: "⚠️ Failed to launch Roblox on emulator via adb",
+                    title: "SoRa :: ⚠️ Failed to launch Roblox on emulator via adb",
                     body: error,
                 });
             }

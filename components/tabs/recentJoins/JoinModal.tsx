@@ -12,10 +12,12 @@ import { closeAllModals, ModalCloseButton, ModalContent, ModalFooter, ModalHeade
 import { NavigationRouter, React, showToast, Toasts } from "@webpack/common";
 
 import { joinUri } from "../../../services/RobloxService";
+import { settings } from "../../../settings";
 import { SnipeEntry, SnipeLogEntry, SnipeStore, useSnipeEntry } from "../../../stores/SnipeStore";
 import { SnipeTag } from "../../../types";
 import { formatElapsedTime } from "../../../utils";
-import { FallbackImage, formatTimeAgo, TagBadge } from "./components";
+import Spoiler from "../../ui/Spoiler";
+import { FallbackImage, formatTimeAgo, MessageTextarea,TagBadge } from "./components";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -115,6 +117,7 @@ function JoinModal({ entry: initialEntry, modalProps }: {
     modalProps: ModalProps;
 }) {
     const entry = useSnipeEntry(initialEntry.id) ?? initialEntry;
+    const { anonymizeEverything } = settings.use(["anonymizeEverything"]);
 
     const jumpToMessage = () => {
         if (!entry.messageJumpUrl) return;
@@ -211,19 +214,34 @@ function JoinModal({ entry: initialEntry, modalProps }: {
                             <DetailRow label="Trigger" value={`${entry.triggerName}`} />
                             <DetailRow label="Priority" value={`${entry.triggerPriority}`} />
                             <DetailRow label="Type" value={entry.triggerType} />
-                            <DetailRow label="Time" value={`${formatTimeAgo(entry.timestamp)} ⬝ ${new Date(entry.timestamp).toLocaleString()}`} />
                             {entry.biomeDurationMs && (
                                 <DetailRow label="Biome duration" value={formatElapsedTime(entry.biomeDurationMs)} />
                             )}
+                            <DetailRow label="Time" value={
+                                anonymizeEverything
+                                    ? <Spoiler><span>{formatTimeAgo(entry.timestamp)} ⬝ {new Date(entry.timestamp).toLocaleString()}</span></Spoiler>
+                                    : `${formatTimeAgo(entry.timestamp)} ⬝ ${new Date(entry.timestamp).toLocaleString()}`
+                            } />
+
                             {entry.channelName && (
-                                <DetailRow label="Channel" value={`#${entry.channelName}${entry.guildName ? ` ⬝ ${entry.guildName}` : ""}`} />
+                                <DetailRow label="Channel" value={
+                                    anonymizeEverything
+                                        ? <Spoiler><span>{`#${entry.channelName}${entry.guildName ? ` ⬝ ${entry.guildName}` : ""}`}</span></Spoiler>
+                                        : `#${entry.channelName}${entry.guildName ? ` ⬝ ${entry.guildName}` : ""}`
+                                } />
                             )}
+
                             {entry.authorName && (
                                 <DetailRow label="Posted by" value={
-                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                        <FallbackImage src={entry.authorAvatarUrl} style={{ width: 16, height: 16, borderRadius: "50%" }} />
-                                        {entry.authorName}
-                                    </span>
+                                    anonymizeEverything
+                                        ? <Spoiler style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                            <FallbackImage src={entry.authorAvatarUrl} style={{ width: 16, height: 16, borderRadius: "50%" }} />
+                                            <span>{entry.authorName}</span>
+                                        </Spoiler>
+                                        : <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                            <FallbackImage src={entry.authorAvatarUrl} style={{ width: 16, height: 16, borderRadius: "50%" }} />
+                                            {entry.authorName}
+                                        </span>
                                 } />
                             )}
                         </div>
@@ -233,26 +251,15 @@ function JoinModal({ entry: initialEntry, modalProps }: {
                         <Divider />
                         <section>
                             <Heading tag="h5" style={{ marginBottom: 8 }}>User message (cleaned)</Heading>
-                            <textarea
-                                readOnly
-                                value={entry.processedMessageText}
-                                style={{
-                                    width: "100%",
-                                    resize: "vertical",
-                                    padding: "8px 10px",
-                                    borderRadius: 6,
-                                    border: "1px solid var(--background-mod-subtle)",
-                                    background: "var(--background-tertiary)",
-                                    color: "var(--text-default)",
-                                    fontSize: 13,
-                                    fontFamily: "var(--font-code)",
-                                    lineHeight: 1.5,
-                                    minHeight: 60,
-                                    boxSizing: "border-box",
-                                    outline: "none",
-                                    scrollbarWidth: "thin",
-                                }}
-                            />
+                            {anonymizeEverything
+                                ? <Spoiler
+                                    style={{ display: "block", width: "100%" }}
+                                    placeholder={<MessageTextarea value="█████ ████ ██ ███████ ████" />}
+                                >
+                                    <MessageTextarea value={entry.processedMessageText} />
+                                </Spoiler>
+                                : <MessageTextarea value={entry.processedMessageText} />
+                            }
                         </section>
                     </>}
 
@@ -278,7 +285,15 @@ function JoinModal({ entry: initialEntry, modalProps }: {
                         <Divider />
                         <section>
                             <Heading tag="h5" style={{ marginBottom: 8 }}>Log</Heading>
-                            <SnipeLog entries={entry.log} />
+                            {anonymizeEverything
+                                ? <Spoiler
+                                    style={{ display: "block", width: "100%" }}
+                                    placeholder={<MessageTextarea value="███ ███████ ██ ██ █ ███████ █ █████" />}
+                                >
+                                    <SnipeLog entries={entry.log} />
+                                </Spoiler>
+                                : <SnipeLog entries={entry.log} />
+                            }
                         </section>
                     </>}
                 </div>

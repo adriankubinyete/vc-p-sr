@@ -9,15 +9,17 @@ import { Paragraph } from "@components/Paragraph";
 import { closeAllModals } from "@utils/modal";
 import { NavigationRouter, React, showToast, TextInput, Toasts, useEffect, useState } from "@webpack/common";
 
+import { settings } from "../../../settings";
 import { SnipeEntry, SnipeStore, useSnipeHistory } from "../../../stores/SnipeStore";
-import { SnipeTag } from "../../../types";
 import { UIState } from "../../../stores/UIStateStore";
+import { SnipeTag } from "../../../types";
 import { formatElapsedTime } from "../../../utils";
 import { JoinLockBanner } from "../../JoinLockBanner";
 import { PendingActionBanner } from "../../PendingActionBanner";
 import { DeleteButton } from "../../ui/buttons/DeleteButton";
 import { QuickFilterBtn } from "../../ui/buttons/QuickFilterBtn";
 import { PillVariant } from "../../ui/Pill";
+import Spoiler from "../../ui/Spoiler";
 import { DANGER_TAGS, FallbackImage, formatTimeAgo, TagBadge } from "./components";
 import {
     openJoinModal,
@@ -60,6 +62,7 @@ function JoinCard({ entry, shiftHeld, onClick, onContextMenu }: {
     const [hovered, setHovered] = useState(false);
     const visibleTags = entry.tags.slice(0, 3);
     const extra = entry.tags.length - visibleTags.length;
+    const { anonymizeEverything } = settings.use(["anonymizeEverything"]);
 
     return (
         <div
@@ -109,6 +112,7 @@ function JoinCard({ entry, shiftHeld, onClick, onContextMenu }: {
                         {entry.triggerName}
                     </div>
 
+                    {/* Channel info */}
                     <div style={{
                         fontSize: 12,
                         color: "var(--text-muted)",
@@ -117,9 +121,11 @@ function JoinCard({ entry, shiftHeld, onClick, onContextMenu }: {
                         whiteSpace: "nowrap",
                         marginBottom: 6,
                     }}>
-                        {[entry.channelName && `#${entry.channelName}`, entry.guildName]
-                            .filter(Boolean)
-                            .join(" · ")}
+                        {anonymizeEverything
+                            ? <Spoiler>
+                                <span>{[entry.channelName && `#${entry.channelName}`, entry.guildName].filter(Boolean).join(" · ")}</span>
+                            </Spoiler>
+                            : [entry.channelName && `#${entry.channelName}`, entry.guildName].filter(Boolean).join(" · ")}
                     </div>
 
                     <div style={{
@@ -129,15 +135,28 @@ function JoinCard({ entry, shiftHeld, onClick, onContextMenu }: {
                         fontSize: 12,
                         color: "var(--text-muted)"
                     }}>
-                        {entry.authorName && <>
-                            <FallbackImage
-                                src={entry.authorAvatarUrl}
-                                style={{ width: 16, height: 16, borderRadius: "50%" }}
-                            />
-                            <span>{entry.authorName}</span>
-                            <span>·</span>
-                        </>}
-                        <span>{formatTimeAgo(entry.timestamp)}</span>
+                        {anonymizeEverything
+                            ? (
+                                <Spoiler style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <FallbackImage
+                                        src={entry.authorAvatarUrl}
+                                        style={{ width: 16, height: 16, borderRadius: "50%" }}
+                                    />
+                                    <span>{entry.authorName}</span>
+                                    <span>· {formatTimeAgo(entry.timestamp)}</span>
+                                </Spoiler>
+                            )
+                            : entry.authorName && (
+                                <>
+                                    <FallbackImage
+                                        src={entry.authorAvatarUrl}
+                                        style={{ width: 16, height: 16, borderRadius: "50%" }}
+                                    />
+                                    <span>{entry.authorName}</span>
+                                    <span>· {formatTimeAgo(entry.timestamp)}</span>
+                                </>
+                            )
+                        }
                     </div>
                 </div>
 

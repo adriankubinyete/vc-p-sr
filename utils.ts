@@ -132,3 +132,6 @@ export function extractComponentUrls(components: any[]): string[] {
 
     return urls;
 }
+
+export const redact = (min = 6, max = 14) =>
+    "█".repeat(Math.floor(Math.random() * (max - min + 1)) + min);

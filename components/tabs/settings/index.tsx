@@ -146,6 +146,12 @@ export function SettingsTab() {
             ],
         },
         {
+            title: "User Interface",
+            entries: [
+                { id: "anonymizeEverything", label: "Anonymize Everything", description: "Hide every information that could lead to identifying the origin of your snipe.", tooltip: "This will hide the author, server, channel, message and logs for each snipe in the history page. You may click to reveal each entry individually." },
+            ],
+        },
+        {
             title: "Snipe Configuration",
             entries: [
                 { id: "flattenEmbeds", label: "Interpret Embeds", description: "Include embed titles and descriptions when matching triggers. Useful for macro servers that post biomes inside embeds rather than plain text." },

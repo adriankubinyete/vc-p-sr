@@ -198,6 +198,12 @@ export const settings = definePluginSettings({
         default: true,
         hidden: true,
     },
+    anonymizeEverything: {
+        type: OptionType.BOOLEAN,
+        description: "Hide all identifiers from the UI. Default: true",
+        default: true,
+        hidden: true,
+    },
 
     // monitoring
     monitoredGuilds: {

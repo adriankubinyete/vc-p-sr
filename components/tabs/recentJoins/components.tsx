@@ -61,3 +61,28 @@ export function formatTimeAgo(ts: number): string {
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return `${Math.floor(diff / 86400)}d ago`;
 }
+
+export function MessageTextarea({ value }: { value: string; }) {
+    return (
+        <textarea
+            readOnly
+            value={value}
+            style={{
+                width: "100%",
+                resize: "vertical",
+                padding: "8px 10px",
+                borderRadius: 6,
+                border: "1px solid var(--background-mod-subtle)",
+                background: "var(--background-tertiary)",
+                color: "var(--text-default)",
+                fontSize: 13,
+                fontFamily: "var(--font-code)",
+                lineHeight: 1.5,
+                minHeight: 60,
+                boxSizing: "border-box",
+                outline: "none",
+                scrollbarWidth: "thin",
+            }}
+        />
+    );
+}

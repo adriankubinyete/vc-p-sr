@@ -358,5 +358,11 @@ export const settings = definePluginSettings({
         description: "[internal] The last known published version of the plugin.",
         default: "",
         hidden: true,
+    },
+    lastKnownPublishedChangelog: {
+        type: OptionType.STRING,
+        description: "[internal] The last known published changelog of the plugin.",
+        default: "",
+        hidden: true,
     }
 });

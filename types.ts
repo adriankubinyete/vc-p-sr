@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// ─── Snipable links ───────────────────────────────────────────────────────────
+// -- Snipable links
 
 export interface RobloxPrivateServerLink {
     type: "private";
@@ -27,7 +27,25 @@ export interface SSTJoinGuardLink {
 
 export type SnipableLink = RobloxPrivateServerLink | RobloxShareLink | SSTJoinGuardLink;
 
-// ─── Re-exports ───────────────────────────────────────────────────────────────
+// -- Versioning stuff
+
+export interface ChangelogEntry {
+    type: string;
+    text: string;
+    description?: string;
+}
+
+export interface ChangelogVersion {
+    version: string;
+    entries: ChangelogEntry[];
+}
+
+export interface VersionManifest {
+    currentVersion: string;
+    changelog: ChangelogVersion[];
+}
+
+// -- Re-exports
 
 export type { SnipeMetrics, SnipeTag } from "./stores/SnipeStore";
 export type { Trigger } from "./stores/TriggerStore";

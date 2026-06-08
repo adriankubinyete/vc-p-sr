@@ -9,18 +9,19 @@ import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, Mod
 import { React } from "@webpack/common";
 
 import { UIState } from "../stores/UIStateStore";
-import { isDeveloper } from "../utils";
+import { hasNewVersionAvailable, isDeveloper } from "../utils";
 import { AboutTab } from "./tabs/about";
 import { DeveloperTab } from "./tabs/developer";
 import { RecentJoinsTab } from "./tabs/recentJoins";
 import { SettingsTab } from "./tabs/settings";
 import { StatsTab } from "./tabs/stats";
 import { TriggersTab } from "./tabs/triggers";
+import { UpdatesTab } from "./tabs/updates";
 import { UtilsTab } from "./tabs/utils";
 
 // ─── Definição das tabs ────────────────────────────────────────────────────────
 
-type TabId = "recentJoins" | "triggers" | "settings" | "about" | "dev" | "stats" | "utilities" | "testtab1" | "testtab2" | "testtab3";
+type TabId = "recentJoins" | "triggers" | "settings" | "about" | "dev" | "stats" | "utilities" | "updates" | "testtab2" | "testtab3";
 
 interface Tab {
     id: TabId;
@@ -34,11 +35,9 @@ const TABS: Tab[] = [
     { id: "triggers", label: "Triggers", component: TriggersTab },
     { id: "settings", label: "Settings", component: SettingsTab },
     { id: "stats", label: "Stats", component: StatsTab },
-    { id: "about", label: "About", component: AboutTab },
-    { id: "testtab1", label: "testtab1", component: AboutTab },
-    { id: "testtab2", label: "testtab2", component: AboutTab },
-    { id: "testtab3", label: "testtab3", component: AboutTab },
     { id: "utilities", label: "Utilities", component: UtilsTab },
+    // { id: "about", label: "About", component: AboutTab },
+    { id: "updates", label: "Updates", component: UpdatesTab },
     { id: "dev", label: "Developer", component: DeveloperTab, devOnly: true },
 ];
 
@@ -63,6 +62,8 @@ export function SolsRadarModal({ modalProps, initialTab }: SolsRadarModalProps) 
     const [activeTab, setActiveTab] = React.useState<TabId>(() =>
         resolveTab(initialTab ?? UIState.get("activeTab"))
     );
+    const hasUpdate = hasNewVersionAvailable();
+    // const hasUpdate = true;
 
     const tabsRef = React.useRef<HTMLDivElement>(null);
 
@@ -135,6 +136,24 @@ export function SolsRadarModal({ modalProps, initialTab }: SolsRadarModalProps) 
                         }}
                     >
                         {tab.label}
+                        {tab.id === "updates" && hasUpdate && (
+                            <span
+                                style={{
+                                    position: "absolute",
+                                    top: 6,
+                                    right: 6,
+
+                                    width: 8,
+                                    height: 8,
+
+                                    borderRadius: "50%",
+
+                                    background: "var(--status-danger)",
+
+                                    boxShadow: "0 0 0 2px var(--background-primary)",
+                                }}
+                            />
+                        )}
                     </button>
                 ))}
             </div>

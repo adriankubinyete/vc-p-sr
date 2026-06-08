@@ -6,7 +6,7 @@
 
 import { React, useState } from "@webpack/common";
 
-import { PLUGIN_VERSION } from "../../../version";
+import { PLUGIN_VERSION } from "../../../utils";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 

@@ -27,8 +27,7 @@ import { isDuplicateLink, markAsSeen } from "./services/SnipeDeduplicator";
 import { settings } from "./settings";
 import { ActiveChannelStore } from "./stores/ActiveChannelStore";
 import { SnipeMetrics } from "./types";
-import { ensureDailyVersionCheck } from "./utils";
-import { PLUGIN_VERSION } from "./version";
+import { ensureDailyVersionCheck, getCurrentVersion } from "./utils";
 
 const logger = new Logger("SolRadar");
 
@@ -85,7 +84,7 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
 export default definePlugin({
     name: "SolRadar",
     description: "Does Sols RNG stuff",
-    version: PLUGIN_VERSION,
+    version: getCurrentVersion(),
     authors: [{ name: "masutty", id: 188851299255713792n }],
     settings,
 

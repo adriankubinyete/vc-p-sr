@@ -263,23 +263,7 @@ export function getCurrentVersionEntries(): ChangelogEntry[] {
     );
 }
 
-export async function ensureDailyVersionCheck() {
-    if (!settings.store.shouldCheckForUpdates) {
-        logger.debug("Update checks are disabled.");
-        return;
-    }
-
-    const now = Date.now();
-    const lastCheck = settings.store.lastVersionCheck ?? 0;
-
-    const UPDATE_CHECK_DELAY = 24 * 60 * 60 * 1000;
-
-    if (now - lastCheck < UPDATE_CHECK_DELAY) {
-        return;
-    }
-
-    logger.debug("Checking for updates...");
-
+export async function checkForUpdates(): Promise<void> {
     const manifest = await getLatestPublishedManifest();
 
     if (!manifest) {
@@ -296,12 +280,9 @@ export async function ensureDailyVersionCheck() {
 
     settings.store.lastKnownPublishedVersion = manifest.currentVersion;
     settings.store.lastKnownPublishedChangelog = JSON.stringify(latestRelease?.entries ?? []);
-    settings.store.lastVersionCheck = now;
+    settings.store.lastVersionCheck = Date.now();
 
-    if (!isVersionNewer(
-        getCurrentVersion(),
-        manifest.currentVersion
-    )) {
+    if (!isVersionNewer(getCurrentVersion(), manifest.currentVersion)) {
         logger.debug("Plugin is already up to date.");
         return;
     }
@@ -314,4 +295,19 @@ export async function ensureDailyVersionCheck() {
         title: "SoRa :: Update Available!",
         body: `A new version of SolRadar is available: ${manifest.currentVersion} (current: ${getCurrentVersion()})`
     });
+}
+
+export async function ensureDailyVersionCheck(): Promise<void> {
+    if (!settings.store.shouldCheckForUpdates) {
+        logger.debug("Update checks are disabled.");
+        return;
+    }
+
+    const UPDATE_CHECK_DELAY = 24 * 60 * 60 * 1000;
+    const lastCheck = settings.store.lastVersionCheck ?? 0;
+
+    if (Date.now() - lastCheck < UPDATE_CHECK_DELAY) return;
+
+    logger.debug("Checking for updates...");
+    await checkForUpdates();
 }

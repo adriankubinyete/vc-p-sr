@@ -15,7 +15,7 @@ import { getRobloxProcess, joinUri, prepareAdb, rejoinUntilBiome, RejoinUntilBio
 import { settings } from "../../../settings";
 import { JoinLockStore } from "../../../stores/JoinLockStore";
 import { SnipeStore } from "../../../stores/SnipeStore";
-import { isDeveloper } from "../../../utils";
+import { checkForUpdates,isDeveloper } from "../../../utils";
 import { EditableActionButton } from "../../ui/EditableActionButton";
 import { Pill } from "../../ui/Pill";
 
@@ -164,6 +164,10 @@ export function DeveloperTab() {
 
                 <Button size="small" variant="positive" onClick={() => logger.debug(isDeveloper())}>
                     isDeveloper()
+                </Button>
+
+                <Button size="small" variant="positive" onClick={() => checkForUpdates()}>
+                    Check for updates
                 </Button>
             </div>
 

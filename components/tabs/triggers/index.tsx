@@ -22,6 +22,7 @@ import {
     useTriggers,
 } from "../../../stores/TriggerStore";
 import { UIState } from "../../../stores/UIStateStore";
+import defaultTriggers from "../../../triggers.json";
 import { isDeveloper } from "../../../utils";
 import { JoinLockBanner } from "../../JoinLockBanner";
 import { DeleteButton } from "../../ui/buttons/DeleteButton";
@@ -526,60 +527,65 @@ export function TriggersTab() {
         return applyQuery(triggers, q, typeFilter);
     }, [triggers, search, typeFilter]);
 
+    const showImportModeAlert = (json: string) => {
+        Alerts.show({
+            title: "Import Triggers",
+            body: (
+                <div style={{ minWidth: "350px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    <Paragraph>
+                        How would you like to import these triggers?<br /><br />
+                        <strong>Add as new</strong> - added alongside your existing ones.<br /><br />
+                        <strong>Replace</strong> - current triggers deleted and replaced.
+                    </Paragraph>
+                    <div style={{ display: "flex", flexDirection: "row", gap: 8, width: "100%" }}>
+                        <Button variant="positive" style={{ flex: 1 }} onClick={() => {
+                            Alerts.close();
+                            importTriggersFromJson(json, "merge").then(result => {
+                                if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
+                                else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
+                            });
+                        }}>Add as new</Button>
+                        <Button variant="dangerPrimary" style={{ flex: 1 }} onClick={() => {
+                            Alerts.close();
+                            importTriggersFromJson(json, "replace").then(result => {
+                                if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
+                                else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
+                            });
+                        }}>Replace</Button>
+                    </div>
+                </div>
+            ),
+            confirmText: "Cancel",
+        });
+    };
+
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         e.target.value = "";
-
         const reader = new FileReader();
-        reader.onload = async ev => {
-            const json = ev.target?.result as string;
-
-            Alerts.show({
-                title: "Import Triggers",
-                body: (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        <Paragraph>
-                            How would you like to import these triggers?<br />
-                            <br />
-                            <strong>Add as new</strong> — imported triggers are added alongside your existing ones.<br />
-                            <br />
-                            <strong>Replace</strong> — your current triggers are deleted and replaced with the imported ones.
-                        </Paragraph>
-                        <div style={{ display: "flex", flexDirection: "row", gap: 8, width: "100%" }}>
-                            <Button
-                                variant="positive"
-                                style={{ flex: 1 }}
-                                onClick={() => {
-                                    Alerts.close();
-                                    importTriggersFromJson(json, "merge").then(result => {
-                                        if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
-                                        else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
-                                    });
-                                }}
-                            >
-                                Add as new
-                            </Button>
-                            <Button
-                                variant="dangerPrimary"
-                                style={{ flex: 1 }}
-                                onClick={() => {
-                                    Alerts.close();
-                                    importTriggersFromJson(json, "replace").then(result => {
-                                        if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
-                                        else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
-                                    });
-                                }}
-                            >
-                                Replace
-                            </Button>
-                        </div>
-                    </div>
-                ),
-                confirmText: "Cancel",
-            });
-        };
+        reader.onload = ev => showImportModeAlert(ev.target?.result as string);
         reader.readAsText(file);
+    };
+
+    const handleImportMenu = () => {
+        Alerts.show({
+            title: "Import Triggers",
+            body: (
+                <div style={{ minWidth: "350px", display: "flex", flexDirection: "column", gap: 8 }}>
+                    <Paragraph>Choose an import source:</Paragraph>
+                    <Button variant="secondary" style={{ width: "100%" }} onClick={() => {
+                        Alerts.close();
+                        showImportModeAlert(JSON.stringify(defaultTriggers)); // import do teu triggers.json
+                    }}>Default Triggers</Button>
+                    <Button variant="secondary" style={{ width: "100%" }} onClick={() => {
+                        Alerts.close();
+                        importRef.current?.click();
+                    }}>From File</Button>
+                </div>
+            ),
+            confirmText: "Cancel",
+        });
     };
 
     const handleExport = () => {
@@ -722,7 +728,7 @@ export function TriggersTab() {
                     <Button size="small" variant="link" onClick={handleExport}>
                         Export
                     </Button>
-                    <Button size="small" variant="link" onClick={() => importRef.current?.click()}>
+                    <Button size="small" variant="link" onClick={handleImportMenu}>
                         Import
                     </Button>
                     <Button size="small" variant="positive" onClick={openAddTriggerModal}>

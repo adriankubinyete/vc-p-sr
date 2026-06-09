@@ -341,7 +341,7 @@ export type RedactField =
     | "webhookPersonal"     // limpa webhookContent, webhookEmbedDescription, excludedGuilds, excludedChannels
     | "notificationSound"   // remove o data URI do state
     | "customTriggers"      // remove triggers do tipo CUSTOM inteiro
-    | "conditions"          // zera IDs pessoais: fromUser, inChannel, ignoredChannels, ignoredGuilds
+    | "conditions"          // zera IDs pessoais: fromUser, inChannel, ignoredChannels, ignoredGuilds, mentionRoles
     | "bypasses";           // reseta todos os flags de bypass para false
 
 export type ExportOptions = {
@@ -363,7 +363,7 @@ function redactTrigger(trigger: Trigger, redact: Set<RedactField>): Trigger | nu
         ...trigger,
         conditions: {
             ...trigger.conditions,
-            ...(redact.has("conditions") && { fromUser: [], inChannel: [], ignoredChannels: [], ignoredGuilds: [] }),
+            ...(redact.has("conditions") && { fromUser: [], inChannel: [], ignoredChannels: [], ignoredGuilds: [], mentionRoles: [] }),
             ...(redact.has("bypasses") && {
                 bypassMatchAmbiguity: false,
                 bypassMonitoredOnly: false,

@@ -1,6 +1,15 @@
 {
-    "currentVersion": "1.3.0",
+    "currentVersion": "1.3.1",
     "changelog": [
+        {
+            "version": "1.3.1",
+            "entries": [
+                { "type": "Fixed", "text": "Trigger SafeExport shouldn't be exporting mentionRoles" },
+                { "type": "Added", "text": "A triggers.json file with default triggers" },
+                { "type": "Other", "text": "Reworked import trigger menu to handle default or file" }
+
+            ]
+        },
         {
             "version": "1.3.0",
             "entries": [

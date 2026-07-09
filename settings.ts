@@ -22,6 +22,25 @@ export const ACTION_OPTIONS = [
 const actionOptions = (defaultValue: string) =>
     ACTION_OPTIONS.map(o => ({ ...o, default: o.value === defaultValue }));
 
+// Known macro tools and their hardcoded kill target(s).
+// To map a new one: add an entry here - key is the internal setting value,
+// "label" is what shows up in the "Macro Type" dropdown, "matchBy" picks how
+// "matchValue" (comma-separated) is matched: "name" for the process image name,
+// or "title" for the window title (needed for script-based macros, e.g. AutoHotkey,
+// where multiple unrelated scripts share the same interpreter process name).
+export const MACRO_PRESETS: Record<string, { label: string; matchBy: "name" | "title"; matchValue: string; }> = {
+    maxstellar: { label: "Maxstellar", matchBy: "title", matchValue: "maxstellar's Biome Macro - Running" },
+    fishsol: { label: "FishSol", matchBy: "title", matchValue: "FishSol*" },
+    coteab: { label: "Coteab", matchBy: "title", matchValue: "Coteab Macro*" },
+    jjaram: { label: "J.JARAM", matchBy: "title", matchValue: "J.JARAM - Jirach1's Just Another Roblox Account Manager" },
+    solscope: { label: "SolsScope", matchBy: "title", matchValue: "SolsScope*" },
+};
+
+const macroTypeOptions = (defaultValue: string) => [
+    ...Object.entries(MACRO_PRESETS).map(([value, { label }]) => ({ label, value, default: value === defaultValue })),
+    { label: "Custom", value: "custom", default: defaultValue === "custom" },
+];
+
 export const settings = definePluginSettings({
 
     _openPlugin: {
@@ -85,6 +104,33 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Send a close signal to the emulator via ADB after launching the join URI. Requires ADB configuration below.",
         default: false,
+        hidden: true,
+    },
+    sendKillProcessSignal: {
+        type: OptionType.BOOLEAN,
+        description: "Try to kill any running macro process immediately on snipe.",
+        default: false,
+        hidden: true,
+    },
+    macroType: {
+        type: OptionType.SELECT,
+        description: "Select which macro you are using.",
+        options: macroTypeOptions("custom"),
+        hidden: true,
+    },
+    killMatchBy: {
+        type: OptionType.SELECT,
+        description: "Whether to match the Custom kill target by process name or by window title.",
+        options: [
+            { label: "Process Name", value: "name", default: true },
+            { label: "Window Title", value: "title" },
+        ],
+        hidden: true,
+    },
+    killProcessNames: {
+        type: OptionType.STRING,
+        description: "Type what process names should be terminated once a snipe happens. You can provide multiple process names by separating each via comma. This is case-insensitive. File type is optional, but recommended.",
+        default: "",
         hidden: true,
     },
 

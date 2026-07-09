@@ -11,7 +11,7 @@ import { Snipe } from "../models/Snipe";
 import { settings } from "../settings";
 import { JoinLockStore } from "../stores/JoinLockStore";
 import { SnipableLink, SnipeMetrics, Trigger } from "../types";
-import { Native, parseCsv } from "../utils";
+import { getEffectiveKillTargets, Native, parseCsv } from "../utils";
 import { executeAction } from "./ActionExecutor";
 import { BiomeDetector } from "./BiomeDetector";
 import { startBiomeDetection } from "./BiomeWatcher";
@@ -155,6 +155,35 @@ async function verifySnipeSafety(snipe: Snipe): Promise<void> {
     }
 }
 
+// ─── Macro kill signal ─────────────────────────────────────────────────────────
+
+async function sendMacroKillSignal(snipe: Snipe): Promise<void> {
+    if (!settings.store.sendKillProcessSignal) return;
+
+    const { matchBy, values } = getEffectiveKillTargets();
+    if (values.size === 0) {
+        snipe.logWarn("Kill signal is enabled but no process names are configured.");
+        return;
+    }
+
+    snipe.logInfo(`Kill signal sent (${matchBy === "title" ? "window title" : "process name"}): ${[...values].join(", ")}`);
+
+    const results = await Promise.all(
+        [...values].map(async value => ({
+            value,
+            ...(await Native.killProcess(matchBy === "title" ? { windowTitle: value } : { pname: value })),
+        }))
+    );
+
+    for (const r of results) {
+        if (r.ok) {
+            logger.debug(`${r.value} killed successfully.`);
+        } else {
+            snipe.logWarn(`${r.value}: not found or failed to kill.`);
+        }
+    }
+}
+
 // ─── Join execution ───────────────────────────────────────────────────────────
 
 async function joinServer(uri: string, snipe: Snipe): Promise<JoinServerResult> {
@@ -180,6 +209,12 @@ async function joinServer(uri: string, snipe: Snipe): Promise<JoinServerResult> 
     const openUriDurationMs = performance.now() - tOpenStart;
 
     const tJoinEnd = performance.now();
+
+    // Fire-and-forget — dispatched as early as possible after the join fires,
+    // must not block join-lock activation or biome-detection setup that follow.
+    sendMacroKillSignal(snipe).catch(err =>
+        logger.error("Kill signal crashed unexpectedly:", err)
+    );
 
     if (settings.store.sendAdbSignal) {
         if (!settings.store.ldpAdbPath?.trim()) {

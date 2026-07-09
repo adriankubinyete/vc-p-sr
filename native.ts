@@ -182,7 +182,8 @@ export async function resolveShareLink(
 
 type ProcessLookupTarget =
     | { type: "tasklist"; processName: string; }
-    | { type: "wmic"; processName: string; };
+    | { type: "wmic"; processName: string; }
+    | { type: "windowtitle"; windowTitle: string; };
 
 export async function getProcess(
     _: IpcMainInvokeEvent,
@@ -190,6 +191,22 @@ export async function getProcess(
 ): Promise<ProcessInfo[]> {
     if (process.platform !== "win32") {
         throw new Error("getProcess only works on Windows.");
+    }
+
+    if (target.type === "windowtitle") {
+        const { windowTitle } = target;
+        if (!windowTitle || typeof windowTitle !== "string") {
+            throw new Error("Invalid argument: windowTitle must be a non-empty string.");
+        }
+        // Matches by top-level window title instead of image name — needed for script-based
+        // macros (e.g. AutoHotkey) that all share the same interpreter process name.
+        const { stdout } = await exec(
+            `tasklist /FI "WINDOWTITLE eq ${windowTitle}" /FO CSV /NH`
+        );
+        return stdout.trim().split(/\r?\n/).filter(Boolean).map(line => {
+            const [name, pid] = line.split(/","/).map(s => s.replace(/"/g, "").trim());
+            return { pid: Number(pid), name, path: "" };
+        });
     }
 
     const { type, processName } = target;
@@ -225,18 +242,22 @@ export async function getProcess(
 
 export async function killProcess(
     _: IpcMainInvokeEvent,
-    target: { pid: number; } | { pname: string; }
-): Promise<void> {
-    if (process.platform !== "win32") return;
+    target: { pid: number; } | { pname: string; } | { windowTitle: string; }
+): Promise<{ ok: boolean; error?: string; }> {
+    if (process.platform !== "win32") return { ok: false, error: "Windows only." };
 
     const command = "pid" in target
         ? `taskkill /PID ${target.pid} /F`
-        : `taskkill /IM "${target.pname}" /F`;
+        : "pname" in target
+            ? `taskkill /IM "${target.pname}" /F`
+            // No /IM or /PID here — /FI alone selects and kills every process matching the filter.
+            : `taskkill /FI "WINDOWTITLE eq ${target.windowTitle}" /F`;
 
     try {
         await exec(command);
-    } catch {
-        // silencioso — o processo pode já ter encerrado
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: (err as Error).message };
     }
 }
 

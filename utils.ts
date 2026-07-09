@@ -10,7 +10,7 @@ import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
 import { AuthenticationStore, showToast as defaultShowToast } from "@webpack/common";
 
-import { settings } from "./settings";
+import { MACRO_PRESETS, settings } from "./settings";
 import { ChangelogEntry, ChangelogVersion, VersionManifest } from "./types";
 import versionManifest from "./version.json";
 export const cl = classNameFactory("vc-sora-");
@@ -32,6 +32,24 @@ export function parseCsv(csv?: string): Set<string> {
     if (typeof csv !== "string" && csv !== undefined) throw new TypeError("Expected a string or undefined as the first argument");
     if (!csv?.trim()) return new Set();
     return new Set(csv.split(",").map(s => s.trim()).filter(Boolean));
+}
+
+export interface KillTargets {
+    matchBy: "name" | "title";
+    values: Set<string>;
+}
+
+/**
+ * Resolves the kill target(s) for the currently selected macro type - a preset's hardcoded
+ * match mode/value, or the user-provided killMatchBy + killProcessNames when set to "Custom".
+ */
+export function getEffectiveKillTargets(): KillTargets {
+    const preset = MACRO_PRESETS[settings.store.macroType];
+    if (preset) return { matchBy: preset.matchBy, values: parseCsv(preset.matchValue) };
+    return {
+        matchBy: settings.store.killMatchBy === "title" ? "title" : "name",
+        values: parseCsv(settings.store.killProcessNames),
+    };
 }
 
 /**

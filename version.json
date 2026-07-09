@@ -1,6 +1,14 @@
 {
-    "currentVersion": "1.3.2",
+    "currentVersion": "1.3.3",
     "changelog": [
+        {
+            "version": "1.3.3",
+            "entries": [
+                { "type": "Added", "text": "Send Macro Kill Signal setting", "description": "Force-kill a running macro right after joining a snipe, before it can detect the biome and send a false alert to your macro's webhook." },
+                { "type": "Added", "text": "Macro Type presets", "description": "Pick a known macro to auto-fill its kill target (Maxstellar, FishSol, Coteab, J.JARAM, SolsScope), or choose Custom to set your own." },
+                { "type": "Added", "text": "\"Check processes\" button", "description": "Confirms whether the configured process name or window title actually matches something running, before you rely on it during a live snipe." }
+            ]
+        },
         {
             "version": "1.3.2",
             "entries": [

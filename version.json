@@ -7,7 +7,8 @@
                 { "type": "Added", "text": "Draggable trigger reordering", "description": "Hover a trigger to reveal a drag handle on the left and reorder by dragging. Disabled while any search or filter is active." },
                 { "type": "Added", "text": "Right-click context menu for triggers", "description": "Replaced the right-click action on triggers with a menu with quick actions like enable/disable, duplicate, export, etc." },
                 { "type": "Added", "text": "Duplicate trigger action" },
-                { "type": "Added", "text": "\"Use Legacy Mouse Behavior For Triggers\" setting", "description": "Reverts to the old right-click-to-toggle and ▲▼ button reordering, for anyone who prefers it. This is deprecated and will be removed in a future version. (maybe!)" }
+                { "type": "Added", "text": "\"Use buttons for ordering triggers\" setting", "description": "Reorder triggers with ▲▼ buttons instead of dragging them, for anyone who prefers it." },
+                { "type": "Added", "text": "\"Trigger tab context menu\" setting", "description": "Disable to go back to right-click instantly toggling enabled/disabled instead of opening the context menu." }
             ]
         },
         {

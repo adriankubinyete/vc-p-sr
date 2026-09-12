@@ -196,12 +196,6 @@ export const settings = definePluginSettings({
         default: false,
         hidden: true,
     },
-    useLegacyMouseBehaviorForTriggers: {
-        type: OptionType.BOOLEAN,
-        description: "Revert triggers to the old mouse behavior: right-click instantly toggles enabled/disabled (no context menu), and reordering uses the ▲▼ buttons instead of drag-and-drop.",
-        default: false,
-        hidden: true,
-    },
 
     // adb emulator stuff
     ldpAdbPath: {
@@ -259,6 +253,18 @@ export const settings = definePluginSettings({
     shouldCheckForUpdates: {
         type: OptionType.BOOLEAN,
         description: "Whether to check for updates. Default: true",
+        default: true,
+        hidden: true,
+    },
+    useButtonsForOrderingTriggers: {
+        type: OptionType.BOOLEAN,
+        description: "Reorder triggers with ▲▼ buttons instead of dragging them.",
+        default: false,
+        hidden: true,
+    },
+    useTriggerTabContextMenu: {
+        type: OptionType.BOOLEAN,
+        description: "Right-click a trigger to open a menu with quick actions (enable/disable, edit, duplicate, export, remove). Disable to go back to right-click instantly toggling enabled/disabled.",
         default: true,
         hidden: true,
     },

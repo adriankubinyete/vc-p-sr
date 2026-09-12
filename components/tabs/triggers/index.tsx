@@ -313,7 +313,8 @@ function TriggerCard({
     isLast,
     shiftHeld,
     orderingDisabled,
-    legacyMouseBehavior,
+    useButtonsForOrdering,
+    useContextMenu,
     isDragging,
     onMoveUp,
     onMoveDown,
@@ -325,7 +326,8 @@ function TriggerCard({
     isLast: boolean;
     shiftHeld: boolean;
     orderingDisabled: boolean;
-    legacyMouseBehavior: boolean;
+    useButtonsForOrdering: boolean;
+    useContextMenu: boolean;
     isDragging: boolean;
     onMoveUp: () => void;
     onMoveDown: () => void;
@@ -363,19 +365,19 @@ function TriggerCard({
             onClick={() => openEditTriggerModal(trigger)}
             onContextMenu={e => {
                 e.preventDefault();
-                if (legacyMouseBehavior) toggleTrigger(trigger.id);
-                else openTriggerContextMenu(e, trigger);
+                if (useContextMenu) openTriggerContextMenu(e, trigger);
+                else toggleTrigger(trigger.id);
             }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            title={legacyMouseBehavior
-                ? `${trigger.name} · Left click to edit · Right click to toggle trigger`
-                : `${trigger.name} · Left click to edit · Right click for more options`}
+            title={useContextMenu
+                ? `${trigger.name} · Left click to edit · Right click for more options`
+                : `${trigger.name} · Left click to edit · Right click to toggle trigger`}
         >
             {/* Main row */}
             <div style={{ ...s.cardMain, visibility: isDragging ? "hidden" : "visible" }}>
                 {/* Ordem */}
-                {canReorder && (legacyMouseBehavior ? (
+                {canReorder && (useButtonsForOrdering ? (
                     <div
                         className={`vc-sora-orderslot${hovered ? " visible" : ""}`}
                         style={s.orderButtons}
@@ -566,7 +568,10 @@ export function TriggersTab() {
     const saved = UIState.get("triggers");
     const [search, setSearch] = useState(saved.search);
     const [typeFilter, setTypeFilter] = useState<TriggerType | "all">(saved.typeFilter);
-    const { useLegacyMouseBehaviorForTriggers: legacyMouseBehavior } = settings.use(["useLegacyMouseBehaviorForTriggers"]);
+    const { useButtonsForOrderingTriggers: useButtonsForOrdering, useTriggerTabContextMenu: useContextMenu } = settings.use([
+        "useButtonsForOrderingTriggers",
+        "useTriggerTabContextMenu",
+    ]);
 
     const handleSearchChange = (v: string) => {
         setSearch(v);
@@ -877,7 +882,8 @@ export function TriggersTab() {
                                         isLast={realIdx === triggers.length - 1}
                                         shiftHeld={shiftHeld}
                                         orderingDisabled={orderingDisabled}
-                                        legacyMouseBehavior={legacyMouseBehavior}
+                                        useButtonsForOrdering={useButtonsForOrdering}
+                                        useContextMenu={useContextMenu}
                                         isDragging={drag?.fromIndex === realIdx}
                                         onMoveUp={() => move(realIdx, realIdx - 1)}
                                         onMoveDown={() => move(realIdx, realIdx + 1)}

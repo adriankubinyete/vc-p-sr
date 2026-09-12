@@ -299,6 +299,8 @@ export function SettingsTab() {
             entries: [
                 { id: "anonymizeEverything", label: "Anonymize Everything", description: "Hide every information that could lead to identifying the origin of your snipe. Recommended to keep this enabled if you're going to post screenshots of your snipes.", tooltip: "This will hide the author, server, channel, message and logs for each snipe in the history page. You may click to reveal each entry individually." },
                 { id: "shouldCheckForUpdates", label: "Check for Updates", description: "Check for new versions of SolRadar on startup.", tooltip: "This will check for new versions of SolRadar on startup and display a notification if one is available. Runs once per day." },
+                { id: "useButtonsForOrderingTriggers", label: "Use buttons for ordering triggers", description: "Reorder triggers with ▲▼ buttons instead of dragging them." },
+                { id: "useTriggerTabContextMenu", label: "Trigger tab context menu", description: "Right-click a trigger for quick actions (enable/disable, edit, duplicate, export, remove). Disable to go back to right-click instantly toggling enabled/disabled." },
             ],
         },
         {
@@ -425,7 +427,6 @@ export function SettingsTab() {
                 { id: "customNotificationSoundDelay", label: "Notification Sound Delay (ms)", description: "Delay before playing the trigger's custom notification sound." },
                 { id: "omitAdbErrorNotifications", label: "Omit ADB Error Notifications", description: "Suppress the notification shown when an ADB kill signal fails. The error is still logged to the console." },
                 { id: "hideInactiveIndicator", label: "Hide Inactive Indicator", description: "Hide the red dot on the menu button when auto-join is disabled." },
-                { id: "useLegacyMouseBehaviorForTriggers", label: "Use Legacy Mouse Behavior For Triggers", description: "Right-click instantly toggles enabled/disabled instead of opening a menu, and reordering uses ▲▼ buttons instead of drag-and-drop." },
             ],
         },
     ];

@@ -1,0 +1,34 @@
+/* stylelint-disable declaration-empty-line-before */
+
+/* ─── OrderSlot ──────────────────────────────────────────────────────────────
+ * Shared hover-reveal animation for whatever sits in a card's left "ordering"
+ * slot — the drag handle in the default mode, or the ▲▼ buttons in legacy
+ * mode.
+ *
+ * Collapses to a true zero footprint at rest (max-width: 0, plus a negative
+ * margin-right that cancels the card row's own flex `gap` — gap still applies
+ * between adjacent flex items even at zero width) so cards look identical to
+ * the no-handle/filtered case when not hovered, instead of leaving a residual
+ * gap. Hovering grows it back out, pushing the card's content over to make
+ * room, rather than just fading in place. */
+
+.vc-sora-orderslot {
+    flex-shrink: 0;
+    max-width: 0;
+    margin-right: -12px;
+    opacity: 0;
+    transition: max-width 0.18s cubic-bezier(0.2, 0, 0, 1), margin-right 0.18s cubic-bezier(0.2, 0, 0, 1), opacity 0.18s ease, color 0.1s ease;
+}
+
+.vc-sora-orderslot.visible {
+    max-width: 40px;
+    margin-right: 0;
+    opacity: 1;
+}
+
+/* keyboard-focus fallback: reveals without needing hover */
+.vc-sora-orderslot:focus-visible {
+    max-width: 40px;
+    margin-right: 0;
+    opacity: 1;
+}

@@ -332,6 +332,25 @@ export async function reorderTriggers(ordered: Trigger[]): Promise<void> {
     persist();
 }
 
+export async function duplicateTrigger(id: string): Promise<Trigger | undefined> {
+    await triggerStoreReady;
+    const idx = _triggers.findIndex(t => t.id === id);
+    if (idx === -1) return undefined;
+
+    const { id: _oldId, ...rest } = _triggers[idx];
+    const copy: Trigger = {
+        ...rest,
+        id: crypto.randomUUID(),
+        name: `${rest.name} (copy)`,
+        state: { ...rest.state, enabled: false },
+    };
+
+    _triggers = [..._triggers.slice(0, idx + 1), copy, ..._triggers.slice(idx + 1)];
+    notifyListeners();
+    persist();
+    return copy;
+}
+
 // ─── Export / Import ──────────────────────────────────────────────────────────
 
 export type RedactField =
@@ -354,6 +373,18 @@ export function exportTriggersJson(): string {
 
 export function downloadTriggersJson(): void {
     _downloadJson(exportTriggersJson(), `solsradar-triggers-${Date.now()}.json`);
+}
+
+function _triggerSlug(trigger: Trigger): string {
+    return trigger.name.trim().replace(/\s+/g, "-").toLowerCase() || "unnamed";
+}
+
+export function exportTriggerJson(trigger: Trigger): string {
+    return JSON.stringify([trigger], null, 2);
+}
+
+export function downloadTriggerJson(trigger: Trigger): void {
+    _downloadJson(exportTriggerJson(trigger), `solsradar-trigger-${_triggerSlug(trigger)}-${Date.now()}.json`);
 }
 
 function redactTrigger(trigger: Trigger, redact: Set<RedactField>): Trigger | null {
@@ -408,6 +439,16 @@ export function exportTriggersJsonRedacted(options: ExportOptions = {}): string 
 
 export function downloadTriggersJsonRedacted(options: ExportOptions = {}): void {
     _downloadJson(exportTriggersJsonRedacted(options), `solsradar-triggers-public-${Date.now()}.json`);
+}
+
+export function exportTriggerJsonRedacted(trigger: Trigger, options: ExportOptions = {}): string {
+    const redact = new Set(options.redact ?? []);
+    const result = redactTrigger(trigger, redact);
+    return JSON.stringify(result ? [result] : [], null, 2);
+}
+
+export function downloadTriggerJsonRedacted(trigger: Trigger, options: ExportOptions = {}): void {
+    _downloadJson(exportTriggerJsonRedacted(trigger, options), `solsradar-trigger-public-${_triggerSlug(trigger)}-${Date.now()}.json`);
 }
 
 export function safeExportDraft(draft: Omit<Trigger, "id">): Omit<Trigger, "id"> {

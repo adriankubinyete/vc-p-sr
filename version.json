@@ -1,6 +1,15 @@
 {
-    "currentVersion": "1.3.3",
+    "currentVersion": "1.3.4",
     "changelog": [
+        {
+            "version": "1.3.4",
+            "entries": [
+                { "type": "Added", "text": "Draggable trigger reordering", "description": "Hover a trigger to reveal a drag handle on the left and reorder by dragging. Disabled while any search or filter is active." },
+                { "type": "Added", "text": "Right-click context menu for triggers", "description": "Replaced the right-click action on triggers with a menu with quick actions like enable/disable, duplicate, export, etc." },
+                { "type": "Added", "text": "Duplicate trigger action" },
+                { "type": "Added", "text": "\"Use Legacy Mouse Behavior For Triggers\" setting", "description": "Reverts to the old right-click-to-toggle and ▲▼ button reordering, for anyone who prefers it. This is deprecated and will be removed in a future version. (maybe!)" }
+            ]
+        },
         {
             "version": "1.3.3",
             "entries": [

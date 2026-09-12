@@ -425,6 +425,7 @@ export function SettingsTab() {
                 { id: "customNotificationSoundDelay", label: "Notification Sound Delay (ms)", description: "Delay before playing the trigger's custom notification sound." },
                 { id: "omitAdbErrorNotifications", label: "Omit ADB Error Notifications", description: "Suppress the notification shown when an ADB kill signal fails. The error is still logged to the console." },
                 { id: "hideInactiveIndicator", label: "Hide Inactive Indicator", description: "Hide the red dot on the menu button when auto-join is disabled." },
+                { id: "useLegacyMouseBehaviorForTriggers", label: "Use Legacy Mouse Behavior For Triggers", description: "Right-click instantly toggles enabled/disabled instead of opening a menu, and reordering uses ▲▼ buttons instead of drag-and-drop." },
             ],
         },
     ];

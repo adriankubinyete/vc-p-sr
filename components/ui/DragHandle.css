@@ -1,0 +1,54 @@
+/* stylelint-disable declaration-empty-line-before */
+
+/* ─── DragHandle ─────────────────────────────────────────────────────────── */
+
+/* Handle-specific chrome; the hover-reveal slide animation itself is shared
+ * with the legacy ▲▼ buttons via OrderSlot.css.
+ * The hitbox is generously large — much bigger than the visible grip icon —
+ * so it's easy to grab without having to hover pixel-precisely. It's extended
+ * via an absolutely-positioned pseudo-element rather than height/min-height on
+ * the element itself, so it doesn't inflate the card row's own layout height
+ * (which was making cards taller whenever ordering was enabled vs. filtered). */
+
+.vc-sora-draghandle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 36px;
+    touch-action: none;
+    cursor: grab;
+    color: var(--text-muted);
+}
+
+.vc-sora-draghandle::before {
+    content: "";
+    position: absolute;
+    inset: -8px 0;
+}
+
+/* Compound selector (higher specificity than the plain .vc-sora-orderslot rule in
+ * OrderSlot.css) so this fully owns `transition` here — two rules of equal
+ * specificity both setting the `transition` shorthand for the same element don't
+ * merge, the later one just wins outright and silently drops the other's
+ * properties, which is what was killing the reveal (fade/slide) animation. */
+.vc-sora-orderslot.vc-sora-draghandle {
+    transition: max-width 0.18s cubic-bezier(0.2, 0, 0, 1), margin-right 0.18s cubic-bezier(0.2, 0, 0, 1), opacity 0.18s ease, color 0.1s ease;
+}
+
+.vc-sora-draghandle:hover {
+    color: var(--brand-500);
+}
+
+.vc-sora-draghandle:active {
+    cursor: grabbing;
+    color: var(--brand-500);
+}
+
+.vc-sora-draghandle:focus-visible {
+    color: var(--text-muted);
+    outline: 2px solid var(--brand-500);
+    outline-offset: 1px;
+    border-radius: 3px;
+}

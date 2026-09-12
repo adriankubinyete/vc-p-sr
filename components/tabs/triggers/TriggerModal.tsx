@@ -29,6 +29,7 @@ import { playAudio, showToast } from "../../../utils";
 import { IdChipInput } from "../../ui/IdChipInput";
 import { KeywordsInput } from "../../ui/KeywordsInput";
 import { Note } from "../../ui/Note";
+import { confirmWebhookThenRun } from "./exportActions";
 
 const logger = new Logger("SolRadar.TriggerModal");
 
@@ -1101,13 +1102,15 @@ function TriggerModal({ modalProps, trigger }: TriggerModalProps) {
     };
 
     const handleCopy = () => {
-        try {
-            const { id, ...rest } = trigger!;
-            navigator.clipboard.writeText(JSON.stringify([rest], null, 2));
-            showToast("Trigger copied to clipboard!", Toasts.Type.SUCCESS);
-        } catch (e) {
-            showToast(`Failed to copy trigger: ${e}`, Toasts.Type.FAILURE);
-        }
+        confirmWebhookThenRun([trigger!], () => {
+            try {
+                const { id, ...rest } = trigger!;
+                navigator.clipboard.writeText(JSON.stringify([rest], null, 2));
+                showToast("Trigger copied to clipboard!", Toasts.Type.SUCCESS);
+            } catch (e) {
+                showToast(`Failed to copy trigger: ${e}`, Toasts.Type.FAILURE);
+            }
+        });
     };
 
     const handleSafeExport = () => {

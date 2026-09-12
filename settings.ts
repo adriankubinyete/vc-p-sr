@@ -196,6 +196,12 @@ export const settings = definePluginSettings({
         default: false,
         hidden: true,
     },
+    useLegacyMouseBehaviorForTriggers: {
+        type: OptionType.BOOLEAN,
+        description: "Revert triggers to the old mouse behavior: right-click instantly toggles enabled/disabled (no context menu), and reordering uses the ▲▼ buttons instead of drag-and-drop.",
+        default: false,
+        hidden: true,
+    },
 
     // adb emulator stuff
     ldpAdbPath: {

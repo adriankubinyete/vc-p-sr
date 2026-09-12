@@ -4,11 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "../../ui/OrderSlot.css";
+
 import { Button } from "@components/Button";
 import { Paragraph } from "@components/Paragraph";
 import { Logger } from "@utils/Logger";
-import { Alerts, React, showToast, TextInput, Toasts, useEffect, useRef, useState } from "@webpack/common";
+import { Alerts, React, ReactDOM, showToast, TextInput, Toasts, useEffect, useRef, useState } from "@webpack/common";
 
+import { settings } from "../../../settings";
 import {
     deleteTrigger,
     downloadTriggersJson,
@@ -27,8 +30,11 @@ import { isDeveloper } from "../../../utils";
 import { JoinLockBanner } from "../../JoinLockBanner";
 import { DeleteButton } from "../../ui/buttons/DeleteButton";
 import { QuickFilterBtn } from "../../ui/buttons/QuickFilterBtn";
+import { DragHandle } from "../../ui/DragHandle";
 import { Pill, PillBorder, PillRadius, PillVariant } from "../../ui/Pill";
+import { confirmWebhookThenRun } from "./exportActions";
 import { PublicExportOptions } from "./PublicExportOptions";
+import { openTriggerContextMenu } from "./TriggerContextMenu";
 import { openAddTriggerModal, openEditTriggerModal } from "./TriggerModal";
 
 const logger = new Logger("SolRadar");
@@ -219,6 +225,15 @@ const s = {
         gap: 12,
         padding: "10px 14px",
     },
+    dragGhost: {
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 14px",
+        borderRadius: 8,
+        background: "var(--background-secondary)",
+        border: "1px solid var(--background-modifier-accent)",
+    } as React.CSSProperties,
     orderButtons: {
         display: "flex",
         flexDirection: "column" as const,
@@ -293,25 +308,34 @@ const s = {
 
 function TriggerCard({
     trigger,
+    index,
     isFirst,
     isLast,
     shiftHeld,
-    filterApplied,
+    orderingDisabled,
+    legacyMouseBehavior,
+    isDragging,
     onMoveUp,
     onMoveDown,
+    onDragHandleDown,
 }: {
     trigger: Trigger;
+    index: number;
     isFirst: boolean;
     isLast: boolean;
     shiftHeld: boolean;
-    filterApplied: boolean;
+    orderingDisabled: boolean;
+    legacyMouseBehavior: boolean;
+    isDragging: boolean;
     onMoveUp: () => void;
     onMoveDown: () => void;
+    onDragHandleDown: (e: React.PointerEvent, cardRect: DOMRect) => void;
 }) {
     const variant = TYPE_PILL_VARIANT[trigger.type];
     const label = TYPE_LABELS[trigger.type];
     const initial = trigger.name.charAt(0).toUpperCase();
     const [hovered, setHovered] = useState(false);
+    const cardRef = useRef<HTMLDivElement>(null);
     const { enabled, autojoin, notify, joinlock, joinlockDuration, priority } = trigger.state;
     const { forwarding } = trigger;
     const { bypassMonitoredOnly, bypassIgnoredChannels, bypassIgnoredGuilds, bypassMatchAmbiguity, bypassLinkVerification } = trigger.conditions;
@@ -322,24 +346,55 @@ function TriggerCard({
 
     const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
 
+    const canReorder = !orderingDisabled;
+
     return (
         <div
-            style={{ ...s.card(enabled), filter: hovered ? "brightness(1.1)" : "none" }}
+            ref={cardRef}
+            data-trigger-index={index}
+            style={{
+                ...s.card(enabled),
+                filter: hovered && !isDragging ? "brightness(1.1)" : "none",
+                ...(isDragging && {
+                    border: "2px dashed var(--text-muted)",
+                    background: "var(--background-modifier-selected, var(--background-secondary-alt))",
+                }),
+            }}
             onClick={() => openEditTriggerModal(trigger)}
-            onContextMenu={e => { e.preventDefault(); toggleTrigger(trigger.id); }}
+            onContextMenu={e => {
+                e.preventDefault();
+                if (legacyMouseBehavior) toggleTrigger(trigger.id);
+                else openTriggerContextMenu(e, trigger);
+            }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            title={`${trigger.name} · Left click to edit · Right click to toggle trigger`}
+            title={legacyMouseBehavior
+                ? `${trigger.name} · Left click to edit · Right click to toggle trigger`
+                : `${trigger.name} · Left click to edit · Right click for more options`}
         >
             {/* Main row */}
-            <div style={s.cardMain}>
+            <div style={{ ...s.cardMain, visibility: isDragging ? "hidden" : "visible" }}>
                 {/* Ordem */}
-                {!filterApplied && (
-                    <div style={s.orderButtons} onClick={stopPropagation} onContextMenu={stopPropagation}>
+                {canReorder && (legacyMouseBehavior ? (
+                    <div
+                        className={`vc-sora-orderslot${hovered ? " visible" : ""}`}
+                        style={s.orderButtons}
+                        onClick={stopPropagation}
+                        onContextMenu={stopPropagation}
+                    >
                         <button style={s.orderBtn(isFirst)} disabled={isFirst} onClick={onMoveUp} title="Move this card up">▲</button>
                         <button style={s.orderBtn(isLast)} disabled={isLast} onClick={onMoveDown} title="Move this card down">▼</button>
                     </div>
-                )}
+                ) : (
+                    <DragHandle
+                        visible={hovered}
+                        onPointerDownHandle={e => {
+                            if (cardRef.current) onDragHandleDown(e, cardRef.current.getBoundingClientRect());
+                        }}
+                        onMoveUp={onMoveUp}
+                        onMoveDown={onMoveDown}
+                    />
+                ))}
 
                 {/* Ícone */}
                 {trigger.iconUrl
@@ -383,7 +438,7 @@ function TriggerCard({
             </div>
 
             {/* Footer — priority + estado */}
-            <div style={s.cardFooter}>
+            <div style={{ ...s.cardFooter, visibility: isDragging ? "hidden" : "visible" }}>
                 <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? variant : "muted"} size="xs" title="Type of trigger">{label}</Pill>
                 <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "brand" : "muted"} size="xs" title={`This trigger has a join priority of ${priority} (lower = more important)`}>
                     ★ {priority}
@@ -410,6 +465,30 @@ function TriggerCard({
                 })()}
                 {(forwarding.onMatch.enabled || forwarding.onDetection.enabled) && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "blue" : "muted"} size="xs" emoji="➡️" iconOnly title={"This trigger will forward the messages to a webhook"} />}
             </div>
+        </div>
+    );
+}
+
+// Lightweight floating preview that follows the cursor while dragging — deliberately
+// simpler than the full card (icon + name only), matching how Discord's own reorder
+// previews look for channels/servers.
+function DragGhost({ trigger }: { trigger: Trigger; }) {
+    const variant = TYPE_PILL_VARIANT[trigger.type];
+    const initial = trigger.name.charAt(0).toUpperCase();
+    const { enabled } = trigger.state;
+
+    return (
+        <div style={s.dragGhost}>
+            {trigger.iconUrl
+                ? <img src={trigger.iconUrl} alt="" style={s.cardIcon} />
+                : <div
+                    className={`vc-sora-pill-base vc-sora-pill-${enabled ? variant : "muted"}`}
+                    style={{ ...s.cardIconPlaceholder, borderRadius: 8, whiteSpace: "unset" }}
+                >
+                    {initial}
+                </div>
+            }
+            <span style={s.cardName(enabled)}>{trigger.name}</span>
         </div>
     );
 }
@@ -481,10 +560,13 @@ export function CollapsibleTip({ children, title = "Tips", emoji }: {
 export function TriggersTab() {
     const triggers = useTriggers();
     const importRef = useRef<HTMLInputElement>(null);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const [shiftHeld, setShiftHeld] = useState(false);
     const saved = UIState.get("triggers");
     const [search, setSearch] = useState(saved.search);
     const [typeFilter, setTypeFilter] = useState<TriggerType | "all">(saved.typeFilter);
+    const { useLegacyMouseBehaviorForTriggers: legacyMouseBehavior } = settings.use(["useLegacyMouseBehaviorForTriggers"]);
 
     const handleSearchChange = (v: string) => {
         setSearch(v);
@@ -526,6 +608,10 @@ export function TriggersTab() {
         const q = parseQuery(search);
         return applyQuery(triggers, q, typeFilter);
     }, [triggers, search, typeFilter]);
+
+    // Ordering (drag or legacy ▲▼) is purely visual, so it's disabled while any
+    // filter narrows the list — pill filter or text search alike.
+    const orderingDisabled = filtered.length !== triggers.length;
 
     const showImportModeAlert = (json: string) => {
         Alerts.show({
@@ -589,40 +675,14 @@ export function TriggersTab() {
     };
 
     const handleExport = () => {
-        const triggersWithWebhooks = triggers.filter(t => t.forwarding.webhookUrl.trim());
-
-        if (triggersWithWebhooks.length > 0) {
-            const triggerList = triggersWithWebhooks.map(t => `• ${t.name}`).join("\n");
-
-            Alerts.show({
-                title: "Hold on!",
-                body: (
-                    <Paragraph>
-                        The following triggers have a webhook URL configured:
-                        <pre style={{ margin: "8px 0", color: "var(--text-muted)" }}>{triggerList}</pre>
-                        Exporting will include these URLs in plain text. Are you sure you want to proceed?
-                    </Paragraph>
-                ),
-                confirmText: "Export anyway",
-                cancelText: "Cancel",
-                onConfirm: () => {
-                    try {
-                        downloadTriggersJson();
-                        showToast("Successfully exported triggers!", Toasts.Type.SUCCESS);
-                    } catch (error) {
-                        showToast(`Failed to export triggers: ${error}`, Toasts.Type.FAILURE);
-                    }
-                },
-            });
-            return;
-        }
-
-        try {
-            downloadTriggersJson();
-            showToast("Successfully exported triggers!", Toasts.Type.SUCCESS);
-        } catch (error) {
-            showToast(`Failed to export triggers: ${error}`, Toasts.Type.FAILURE);
-        }
+        confirmWebhookThenRun(triggers, () => {
+            try {
+                downloadTriggersJson();
+                showToast("Successfully exported triggers!", Toasts.Type.SUCCESS);
+            } catch (error) {
+                showToast(`Failed to export triggers: ${error}`, Toasts.Type.FAILURE);
+            }
+        });
     };
 
     const handlePublicExport = () => {
@@ -652,8 +712,123 @@ export function TriggersTab() {
         reorderTriggers(newOrder);
     };
 
+    // `slot` is "insert right before the item currently at real array index `slot`"
+    // (or, when slot === triggers.length, "insert at the very end") — measured
+    // against the array as it stands BEFORE the dragged item is removed.
+    const moveToSlot = (fromIndex: number, slot: number) => {
+        move(fromIndex, slot > fromIndex ? slot - 1 : slot);
+    };
+
+    // ─── Drag-to-reorder (pointer-based) ───────────────────────────────────────
+    // Native HTML5 drag-and-drop is unreliable for custom previews inside Electron
+    // (drag image, overflow clipping on the insertion line, tiny native hitboxes),
+    // so this is driven entirely by pointer events + manual hit-testing instead.
+    const [drag, setDrag] = useState<{
+        fromIndex: number;
+        width: number;
+        grabOffsetX: number;
+        grabOffsetY: number;
+        pointerClientX: number;
+        pointerClientY: number;
+        targetSlot: number | null;
+        indicator: { top: number; left: number; width: number; } | null;
+    } | null>(null);
+
+    const startDrag = (fromIndex: number, e: React.PointerEvent, cardRect: DOMRect) => {
+        e.preventDefault();
+        setDrag({
+            fromIndex,
+            width: cardRect.width,
+            grabOffsetX: e.clientX - cardRect.left,
+            grabOffsetY: e.clientY - cardRect.top,
+            pointerClientX: e.clientX,
+            pointerClientY: e.clientY,
+            targetSlot: null,
+            indicator: null,
+        });
+    };
+
+    useEffect(() => {
+        if (!drag) return;
+
+        const onMove = (e: PointerEvent) => {
+            const containerRect = containerRef.current?.getBoundingClientRect();
+            const wrapperRect = wrapperRef.current?.getBoundingClientRect();
+
+            let targetSlot: number | null = null;
+            let indicator: NonNullable<typeof drag>["indicator"] = null;
+
+            const nearContainer = containerRect
+                && e.clientX >= containerRect.left - 40 && e.clientX <= containerRect.right + 40
+                && e.clientY >= containerRect.top - 40 && e.clientY <= containerRect.bottom + 40;
+
+            if (nearContainer && wrapperRect) {
+                const rows = Array.from(wrapperRef.current?.querySelectorAll<HTMLElement>("[data-trigger-index]") ?? [])
+                    .map(el => ({ idx: Number(el.dataset.triggerIndex), rect: el.getBoundingClientRect() }))
+                    .filter(r => !Number.isNaN(r.idx))
+                    .sort((a, b) => a.idx - b.idx);
+
+                if (rows.length > 0) {
+                    // One canonical Y per possible insertion slot (N rows → N+1 slots).
+                    // Internal slots sit at the midpoint of the gap between two rows,
+                    // so there's exactly one Y for "between row 2 and row 3" — not two
+                    // (row 2's bottom edge vs row 3's top edge) like hit-testing per-row gave.
+                    const slotYs = rows.map((r, i) =>
+                        i === 0 ? r.rect.top : (rows[i - 1].rect.bottom + r.rect.top) / 2
+                    );
+                    slotYs.push(rows[rows.length - 1].rect.bottom);
+
+                    let bestSlot = 0;
+                    let bestDist = Infinity;
+                    slotYs.forEach((y, k) => {
+                        const d = Math.abs(e.clientY - y);
+                        if (d < bestDist) { bestDist = d; bestSlot = k; }
+                    });
+
+                    // Dropping right back next to itself wouldn't actually move anything.
+                    const isNoOp = bestSlot === drag.fromIndex || bestSlot === drag.fromIndex + 1;
+                    if (!isNoOp) {
+                        targetSlot = bestSlot;
+                        const row = rows[Math.min(bestSlot, rows.length - 1)];
+                        indicator = {
+                            top: slotYs[bestSlot] - wrapperRect.top,
+                            left: row.rect.left - wrapperRect.left,
+                            width: row.rect.width,
+                        };
+                    }
+                }
+            }
+
+            setDrag(prev => prev && {
+                ...prev,
+                pointerClientX: e.clientX,
+                pointerClientY: e.clientY,
+                targetSlot,
+                indicator,
+            });
+        };
+
+        const finishDrag = () => {
+            setDrag(prev => {
+                if (prev && prev.targetSlot !== null) {
+                    moveToSlot(prev.fromIndex, prev.targetSlot);
+                }
+                return null;
+            });
+        };
+
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", finishDrag);
+        window.addEventListener("pointercancel", finishDrag);
+        return () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", finishDrag);
+            window.removeEventListener("pointercancel", finishDrag);
+        };
+    }, [drag?.fromIndex]);
+
     return (
-        <div style={s.wrapper}>
+        <div ref={wrapperRef} style={{ ...s.wrapper, position: "relative" }}>
 
             {/* Filters */}
             <div style={s.filters}>
@@ -677,7 +852,7 @@ export function TriggersTab() {
             </div>
 
             {/* List */}
-            <div style={s.container}>
+            <div ref={containerRef} style={s.container}>
                 {filtered.length === 0
                     ? (
                         <div style={s.empty}>
@@ -697,19 +872,58 @@ export function TriggersTab() {
                                     <TriggerCard
                                         key={t.id}
                                         trigger={t}
+                                        index={realIdx}
                                         isFirst={realIdx === 0}
                                         isLast={realIdx === triggers.length - 1}
                                         shiftHeld={shiftHeld}
-                                        filterApplied={typeFilter !== "all"}
+                                        orderingDisabled={orderingDisabled}
+                                        legacyMouseBehavior={legacyMouseBehavior}
+                                        isDragging={drag?.fromIndex === realIdx}
                                         onMoveUp={() => move(realIdx, realIdx - 1)}
                                         onMoveDown={() => move(realIdx, realIdx + 1)}
+                                        onDragHandleDown={(e, cardRect) => startDrag(realIdx, e, cardRect)}
                                     />
                                 );
                             })}
                         </div>
                     )
                 }
+
+                {/* Insertion indicator — where the dragged trigger will land */}
+                {drag?.indicator && (
+                    <div style={{
+                        position: "absolute",
+                        top: drag.indicator.top - 1.5,
+                        left: drag.indicator.left,
+                        width: drag.indicator.width,
+                        height: 3,
+                        borderRadius: 2,
+                        background: "var(--green-360, #23a55a)",
+                        pointerEvents: "none",
+                        zIndex: 30,
+                    }} />
+                )}
             </div>
+
+            {/* Floating preview that follows the cursor while dragging — portaled to
+                <body> so it isn't clipped by the modal's own overflow:hidden if it's
+                dragged past the modal's edge. */}
+            {drag && ReactDOM.createPortal(
+                <div style={{
+                    position: "fixed",
+                    top: drag.pointerClientY - drag.grabOffsetY,
+                    left: drag.pointerClientX - drag.grabOffsetX,
+                    width: drag.width,
+                    borderRadius: 8,
+                    boxShadow: "0 12px 28px rgba(0, 0, 0, 0.45)",
+                    opacity: 0.96,
+                    pointerEvents: "none",
+                    zIndex: 9999,
+                }}>
+                    <DragGhost trigger={triggers[drag.fromIndex]} />
+                </div>,
+                document.body
+            )}
 
             {/* <CollapsibleTip title="Tips">Left click on a trigger to edit it. Right click to toggle between enabled/disabled. Hold Shift to show delete button.</CollapsibleTip> */}
             {/* Toolbar */}

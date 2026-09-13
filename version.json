@@ -1,6 +1,14 @@
 {
-    "currentVersion": "1.3.4",
+    "currentVersion": "1.3.5",
     "changelog": [
+        {
+            "version": "1.3.5",
+            "entries": [
+                { "type": "Improved", "text": "Native log reading no longer blocks on synchronous fs calls", "description": "getRobloxLogs/getRelevantRpcsFromLogTail now run async, and skip re-reading a log's head/tail when nothing about it changed since the last check." },
+                { "type": "Other", "text": "Moved log parsing/caching out of native.ts into services/RobloxLogReader.ts", "description": "native.ts now only exposes raw fs primitives (list/stat/read chunk) — no regex or business logic runs in the native process." },
+                { "type": "Other", "text": "Deduplicated repeated Windows-only/adb-path guards and tasklist CSV parsing across the process-management functions in native.ts" }
+            ]
+        },
         {
             "version": "1.3.4",
             "entries": [

@@ -82,6 +82,8 @@ export interface SnipeEntry {
     authorId?: string;
     channelName?: string;
     guildName?: string;
+    /** Only present on snipes created after this field was added — older entries fall back to guildName for grouping. */
+    guildId?: string;
     messageJumpUrl?: string;
     processedMessageText?: string;
 

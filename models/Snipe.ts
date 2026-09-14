@@ -69,6 +69,7 @@ export class Snipe {
             authorId: message.author.id,
             channelName: channel.name,
             guildName: guild.name,
+            guildId: guild.id,
             messageJumpUrl: `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}`,
             processedMessageText: message.content,
             link: link.link,

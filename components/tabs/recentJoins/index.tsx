@@ -6,8 +6,7 @@
 
 import { Button } from "@components/Button";
 import { Paragraph } from "@components/Paragraph";
-import { closeAllModals } from "@utils/modal";
-import { NavigationRouter, React, showToast, TextInput, Toasts, useEffect, useState } from "@webpack/common";
+import { React, TextInput, useEffect, useState } from "@webpack/common";
 
 import { settings } from "../../../settings";
 import { SnipeEntry, SnipeStore, useSnipeHistory } from "../../../stores/SnipeStore";
@@ -24,6 +23,7 @@ import { DANGER_TAGS, FallbackImage, formatTimeAgo, TagBadge } from "./component
 import {
     openJoinModal,
 } from "./JoinModal";
+import { openSnipeContextMenu } from "./SnipeContextMenu";
 
 // ─── Card styling ─────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ function JoinCard({ entry, shiftHeld, onClick, onContextMenu }: {
     entry: SnipeEntry;
     shiftHeld: boolean;
     onClick: () => void;
-    onContextMenu: () => void;
+    onContextMenu: (e: React.MouseEvent) => void;
 }) {
     const [hovered, setHovered] = useState(false);
     const visibleTags = entry.tags.slice(0, 3);
@@ -67,10 +67,10 @@ function JoinCard({ entry, shiftHeld, onClick, onContextMenu }: {
     return (
         <div
             onClick={onClick}
-            onContextMenu={e => { e.preventDefault(); onContextMenu(); }}
+            onContextMenu={e => { e.preventDefault(); onContextMenu(e); }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            title="Left click for details · Right click to jump to message"
+            title="Left click for details · Right click for more options"
             style={{
                 borderRadius: 8,
                 border: `1px solid ${cardBorderColor(entry)}`,
@@ -281,15 +281,6 @@ export function RecentJoinsTab() {
         return result;
     }, [entries, filter, search]);
 
-    const jumpToMessage = (entry: SnipeEntry) => {
-        if (!entry.messageJumpUrl) return;
-        try {
-            NavigationRouter.transitionTo(new URL(entry.messageJumpUrl).pathname);
-            closeAllModals();
-        }
-        catch { showToast("Failed to navigate.", Toasts.Type.FAILURE); }
-    };
-
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 8 }}>
 
@@ -337,7 +328,7 @@ export function RecentJoinsTab() {
                                     entry={e}
                                     shiftHeld={shiftHeld}
                                     onClick={() => openJoinModal(e)}
-                                    onContextMenu={() => jumpToMessage(e)}
+                                    onContextMenu={ev => openSnipeContextMenu(ev, e)}
                                 />
                             ))}
                         </div>

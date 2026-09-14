@@ -8,7 +8,9 @@ import { Button } from "@components/Button";
 import { Divider } from "@components/Divider";
 import { React } from "@webpack/common";
 
+import { settings } from "../../../settings";
 import { SnipeEntry, SnipeStore, useSnipeHistory } from "../../../stores/SnipeStore";
+import { DONUT_MAX_SLICES, DonutBreakdown, DonutChart, DonutDatum, foldToTopSlices, withDonutColors } from "./DonutChart";
 import { StatCard } from "./StatCard";
 import { StatTriggerDetail } from "./StatTriggerDetail";
 
@@ -77,6 +79,62 @@ function aggregate(entries: SnipeEntry[]): BiomeAggregate[] {
         .sort((a, b) => b.total - a.total);
 }
 
+interface ServerAggregate {
+    key: string;
+    displayName: string;
+    count: number;
+    breakdown: DonutBreakdown;
+}
+
+function emptyBreakdown(): DonutBreakdown {
+    return { real: 0, bait: 0, timeout: 0 };
+}
+
+/** Groups by guildId when available, falling back to guildName for older entries that predate it. */
+function aggregateByServer(entries: SnipeEntry[]): ServerAggregate[] {
+    const map = new Map<string, ServerAggregate>();
+
+    for (const entry of entries) {
+        const key = entry.guildId ?? (entry.guildName ? `name:${entry.guildName}` : "unknown");
+        const displayName = entry.guildName ?? "Unknown Server";
+        const result = getBiomeResult(entry);
+
+        const existing = map.get(key);
+        const agg = existing ?? { key, displayName, count: 0, breakdown: emptyBreakdown() };
+        agg.count++;
+        if (result) agg.breakdown[result]++;
+        if (!existing) map.set(key, agg);
+    }
+
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Builds the "by server" donut data: top servers by volume, folded to "Other" beyond
+ * the categorical color cap. When anonymizeEverything is on, the (non-"Other") labels
+ * are replaced by rank ("Server 1", "Server 2"...) instead of the real server name.
+ */
+function buildServerDonutData(entries: SnipeEntry[], anonymize: boolean): DonutDatum[] {
+    const raw = aggregateByServer(entries);
+    const top = raw.slice(0, DONUT_MAX_SLICES);
+    const rest = raw.slice(DONUT_MAX_SLICES);
+
+    const otherTotal = rest.reduce((sum, s) => sum + s.count, 0);
+    const otherBreakdown = rest.reduce((sum, s) => ({
+        real: sum.real + s.breakdown.real,
+        bait: sum.bait + s.breakdown.bait,
+        timeout: sum.timeout + s.breakdown.timeout,
+    }), emptyBreakdown());
+
+    const topData: DonutDatum[] = top.map((s, i) => ({
+        label: anonymize ? `Server ${i + 1}` : s.displayName,
+        value: s.count,
+        breakdown: s.breakdown,
+    }));
+
+    return otherTotal > 0 ? [...topData, { label: "Other", value: otherTotal, breakdown: otherBreakdown }] : topData;
+}
+
 function periodToSince(period: Period): number | undefined {
     if (period === "all") return undefined;
     return Date.now() - (period === "7d" ? 7 : 30) * 24 * 60 * 60 * 1000;
@@ -126,10 +184,19 @@ function PeriodSelector({ period, onChange }: { period: Period; onChange: (p: Pe
 export function StatsTab() {
     const [period, setPeriod] = React.useState<Period>("7d");
     const allEntries = useSnipeHistory();
+    const { anonymizeEverything } = settings.use(["anonymizeEverything"]);
 
     const entries = React.useMemo(
         () => filterByPeriod(allEntries, periodToSince(period)),
         [allEntries, period]
+    );
+
+    // Same population as the Trigger Stats list below (biome-verified entries only),
+    // so the two donuts' center totals line up with the "Total Snipes" card instead
+    // of silently counting a different set of entries.
+    const verifiedEntries = React.useMemo(
+        () => entries.filter(e => getBiomeResult(e) !== null),
+        [entries]
     );
 
     const aggregates = React.useMemo(() => aggregate(entries), [entries]);
@@ -142,6 +209,20 @@ export function StatsTab() {
     const realPct = total > 0 ? Math.round((totalReal / total) * 100) : 0;
     const baitPct = total > 0 ? Math.round((totalBait / total) * 100) : 0;
     const timeoutPct = total > 0 ? Math.round((totalTimeout / total) * 100) : 0;
+
+    const serverDonutSlices = React.useMemo(
+        () => withDonutColors(buildServerDonutData(verifiedEntries, anonymizeEverything)),
+        [verifiedEntries, anonymizeEverything]
+    );
+
+    const triggerDonutSlices = React.useMemo(
+        () => withDonutColors(foldToTopSlices(aggregates.map(a => ({
+            label: a.trigger,
+            value: a.total,
+            breakdown: { real: a.real, bait: a.bait, timeout: a.timeout },
+        })))),
+        [aggregates]
+    );
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 20 }}>
@@ -178,6 +259,12 @@ export function StatsTab() {
                         <StatCard value={`${baitPct}%`} title="Bait" color="red" />
                         <StatCard value={`${timeoutPct}%`} title="Timeout" color="yellow" />
                         <StatCard value={total} title="Total Snipes" />
+                    </div>
+
+                    {/* Distribution */}
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        <DonutChart title="By Server" slices={serverDonutSlices} />
+                        <DonutChart title="By Trigger" slices={triggerDonutSlices} />
                     </div>
 
                     {/* Triggers List */}

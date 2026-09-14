@@ -74,20 +74,20 @@ function TriggerContextMenu({ trigger }: { trigger: Trigger; }) {
             >
                 <Menu.MenuItem
                     id="vc-sora-trigger-export-file"
-                    label="To File"
+                    label="To file..."
                     leadingAccessory={{ type: "icon", icon: FolderIcon }}
                     action={() => confirmWebhookThenRun([trigger], () => downloadTriggerJson(trigger))}
                 />
                 <Menu.MenuItem
                     id="vc-sora-trigger-export-clipboard"
-                    label="To Clipboard"
+                    label="To clipboard"
                     leadingAccessory={{ type: "icon", icon: CopyIcon }}
                     action={() => confirmWebhookThenRun([trigger], () => copyTriggerToClipboard(trigger))}
                 />
                 {isDeveloper() && (
                     <Menu.MenuItem
                         id="vc-sora-trigger-export-safe"
-                        label="To File (safe)"
+                        label="To file (safe)..."
                         leadingAccessory={{ type: "icon", icon: CloudUploadIcon }}
                         action={() => openSafeExportDialogForTrigger(trigger)}
                     />

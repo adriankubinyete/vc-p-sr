@@ -1,12 +1,19 @@
 {
-    "currentVersion": "1.3.5",
+    "currentVersion": "1.3.6",
     "changelog": [
+        {
+            "version": "1.3.6",
+            "entries": [
+                { "type": "Added", "text": "Snipe breakdown charts in Stats", "description": "New \"By Server\" and \"By Trigger\" charts show where your snipes are coming from at a glance. Hover a slice (or the legend) to see the exact count and its real/bait/timeout split." },
+                { "type": "Added", "text": "Right-click menu for Snipe History entries", "description": "Quick actions on any entry: view details, jump to the message, copy the server link, join server, or remove it." },
+                { "type": "Improved", "text": "Reorganized the Stats tab", "description": "The new charts sit right below the overview cards, above the per-trigger list." }
+            ]
+        },
         {
             "version": "1.3.5",
             "entries": [
-                { "type": "Improved", "text": "Native log reading no longer blocks on synchronous fs calls", "description": "getRobloxLogs/getRelevantRpcsFromLogTail now run async, and skip re-reading a log's head/tail when nothing about it changed since the last check." },
-                { "type": "Other", "text": "Moved log parsing/caching out of native.ts into services/RobloxLogReader.ts", "description": "native.ts now only exposes raw fs primitives (list/stat/read chunk) — no regex or business logic runs in the native process." },
-                { "type": "Other", "text": "Deduplicated repeated Windows-only/adb-path guards and tasklist CSV parsing across the process-management functions in native.ts" }
+                { "type": "Improved", "text": "Faster, more efficient biome detection", "description": "The detector now reads your Roblox logs more efficiently, avoiding unnecessary re-reads on every check." },
+                { "type": "Other", "text": "Internal code cleanup", "description": "No visible changes; just makes the plugin easier to maintain going forward." }
             ]
         },
         {

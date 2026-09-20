@@ -42,6 +42,14 @@ export type ResolvedShareLink =
     | { ok: true; placeId: string; serverId: string; ownerId: string; isValid: boolean; updatedToken: string | null; }
     | { ok: false; status: number; error: string; };
 
+/** Entrada de log do Roblox — definida aqui pra evitar import circular com BiomeDetector. */
+export interface LogEntry {
+    path: string;
+    account: string | null;
+    lastModified: number;
+}
+
+
 // stuff
 
 export async function sendWebhook(_: IpcMainInvokeEvent, url: string, body: string): Promise<void> {
@@ -177,14 +185,6 @@ type ProcessLookupTarget =
     | { type: "wmic"; processName: string; }
     | { type: "windowtitle"; windowTitle: string; };
 
-/** Parses `tasklist ... /FO CSV /NH` output (name + pid, no path column). */
-function parseTasklistCsv(stdout: string): ProcessInfo[] {
-    return stdout.trim().split(/\r?\n/).filter(Boolean).map(line => {
-        const [name, pid] = line.split(/","/).map(s => s.replace(/"/g, "").trim());
-        return { pid: Number(pid), name, path: "" };
-    });
-}
-
 export async function getProcess(
     _: IpcMainInvokeEvent,
     target: ProcessLookupTarget
@@ -203,7 +203,10 @@ export async function getProcess(
         const { stdout } = await exec(
             `tasklist /FI "WINDOWTITLE eq ${windowTitle}" /FO CSV /NH`
         );
-        return parseTasklistCsv(stdout);
+        return stdout.trim().split(/\r?\n/).filter(Boolean).map(line => {
+            const [name, pid] = line.split(/","/).map(s => s.replace(/"/g, "").trim());
+            return { pid: Number(pid), name, path: "" };
+        });
     }
 
     const { type, processName } = target;
@@ -215,7 +218,10 @@ export async function getProcess(
         const { stdout } = await exec(
             `tasklist /FI "IMAGENAME eq ${processName}" /FO CSV /NH`
         );
-        return parseTasklistCsv(stdout);
+        return stdout.trim().split(/\r?\n/).filter(Boolean).map(line => {
+            const [name, pid] = line.split(/","/).map(s => s.replace(/"/g, "").trim());
+            return { pid: Number(pid), name, path: "" };
+        });
     }
 
     if (type === "wmic") {
@@ -234,20 +240,11 @@ export async function getProcess(
     throw new Error(`Unknown process lookup type: ${type}`);
 }
 
-/** Shared "Windows only" rejection for the ok/error-shaped functions below. */
-const WINDOWS_ONLY: { ok: false; error: string; } = { ok: false, error: "Windows only." };
-
-/** Returns an ok:false error if adbPath is missing/invalid, else null. */
-function checkAdbPath(adbPath: string): { ok: false; error: string; } | null {
-    if (!adbPath || !fs.existsSync(adbPath)) return { ok: false, error: `adb.exe not found at: ${adbPath}` };
-    return null;
-}
-
 export async function killProcess(
     _: IpcMainInvokeEvent,
     target: { pid: number; } | { pname: string; } | { windowTitle: string; }
 ): Promise<{ ok: boolean; error?: string; }> {
-    if (process.platform !== "win32") return WINDOWS_ONLY;
+    if (process.platform !== "win32") return { ok: false, error: "Windows only." };
 
     const command = "pid" in target
         ? `taskkill /PID ${target.pid} /F`
@@ -312,10 +309,13 @@ export async function closeRobloxOnEmulator(
     deviceSerial: string,
     packageName: string = "com.roblox.client"
 ): Promise<{ ok: boolean; error?: string }> {
-    if (process.platform !== "win32") return WINDOWS_ONLY;
+    if (process.platform !== "win32") {
+        return { ok: false, error: "Windows only." };
+    }
 
-    const adbErr = checkAdbPath(adbPath);
-    if (adbErr) return adbErr;
+    if (!adbPath || !fs.existsSync(adbPath)) {
+        return { ok: false, error: `adb.exe not found at: ${adbPath}` };
+    }
 
     try {
         // this exec could be exploited... lets hope the user doesnt do anything stupid :clueless:
@@ -332,10 +332,13 @@ export async function emulatorOpenUri(
     deviceSerial: string,
     uri: string
 ): Promise<{ ok: boolean; error?: string }> {
-    if (process.platform !== "win32") return WINDOWS_ONLY;
+    if (process.platform !== "win32") {
+        return { ok: false, error: "Windows only." };
+    }
 
-    const adbErr = checkAdbPath(adbPath);
-    if (adbErr) return adbErr;
+    if (!adbPath || !fs.existsSync(adbPath)) {
+        return { ok: false, error: `adb.exe not found at: ${adbPath}` };
+    }
 
     try {
         // could be exploited... hope the user doesnt do anything stupid :clueless:
@@ -370,9 +373,12 @@ export async function listAdbDevices(
     _: IpcMainInvokeEvent,
     adbPath: string
 ): Promise<{ ok: true; output: string; } | { ok: false; error: string; }> {
-    if (process.platform !== "win32") return WINDOWS_ONLY;
-    const adbErr = checkAdbPath(adbPath);
-    if (adbErr) return adbErr;
+    if (process.platform !== "win32") {
+        return { ok: false, error: "Windows only." };
+    }
+    if (!adbPath || !fs.existsSync(adbPath)) {
+        return { ok: false, error: `adb.exe not found at: ${adbPath}` };
+    }
     try {
         const { stdout } = await exec(`"${adbPath}" devices`);
         return { ok: true, output: stdout.trim() };
@@ -385,9 +391,12 @@ export async function killAdbServer(
     _: IpcMainInvokeEvent,
     adbPath: string
 ): Promise<{ ok: true; } | { ok: false; error: string; }> {
-    if (process.platform !== "win32") return WINDOWS_ONLY;
-    const adbErr = checkAdbPath(adbPath);
-    if (adbErr) return adbErr;
+    if (process.platform !== "win32") {
+        return { ok: false, error: "Windows only." };
+    }
+    if (!adbPath || !fs.existsSync(adbPath)) {
+        return { ok: false, error: `adb.exe not found at: ${adbPath}` };
+    }
     try {
         await exec(`"${adbPath}" kill-server`);
         return { ok: true };
@@ -401,64 +410,140 @@ export async function killAdbServer(
 // pois requerem acesso ao Node/fs (native context).
 
 const ROBLOX_LOGS_DIR = path.join(os.homedir(), "AppData", "Local", "Roblox", "logs");
+const LOG_TAIL_READ_BYTES = 2 * 1024 * 1024; // 2 MB — tail lido por tick
+const LOG_HEAD_READ_BYTES = 1 * 1024 * 1024; // 1 MB — head lido pra extrair userid/username
+const LOG_MAX_AGE_S = 7_200; // 2h — logs mais velhos são ignorados
 
-// Só primitivas cruas de fs aqui — sem regex, sem cache, sem regra de negócio.
-// Todo o parsing/cache de log mora do lado do plugin, em services/RobloxLogReader.ts.
+/**
+ * Lista logs do Roblox recentes e extrai o account (userid ou username) de cada um.
+ * Usa uma única chamada a `fs.statSync` por arquivo (cache local) em vez de três.
+ */
+export function getRobloxLogs(_: IpcMainInvokeEvent, from: "username" | "userid"): LogEntry[] {
+    const nowMs = Date.now();
 
-export interface RobloxLogFile {
-    path: string;
-    mtimeMs: number;
-    size: number;
-}
+    let entries: { file: string; mtime: number; }[] = [];
 
-/** Lista arquivos do diretório de logs do Roblox, com mtime/size — sem filtrar por idade. */
-export async function listRobloxLogFiles(_: IpcMainInvokeEvent): Promise<RobloxLogFile[]> {
-    let files: string[];
     try {
-        files = await fs.promises.readdir(ROBLOX_LOGS_DIR);
+        entries = fs.readdirSync(ROBLOX_LOGS_DIR).flatMap(f => {
+            const full = path.join(ROBLOX_LOGS_DIR, f);
+            try {
+                const stat = fs.statSync(full);
+                if (!stat.isFile()) return [];
+                const ageS = (nowMs - stat.mtime.getTime()) / 1000;
+                if (ageS > LOG_MAX_AGE_S) return [];
+                return [{ file: full, mtime: stat.mtime.getTime() }];
+            } catch {
+                return [];
+            }
+        });
     } catch (err) {
         console.error("[SolRadar.Native] Error listing Roblox logs:", err);
         return [];
     }
 
-    const stats = await Promise.all(files.map(async f => {
-        const full = path.join(ROBLOX_LOGS_DIR, f);
+    // Sort newest first
+    entries.sort((a, b) => b.mtime - a.mtime);
+
+    return entries.flatMap(({ file, mtime }) => {
         try {
-            const stat = await fs.promises.stat(full);
-            if (!stat.isFile()) return null;
-            return { path: full, mtimeMs: stat.mtimeMs, size: stat.size };
+            const account = from === "userid"
+                ? _getUseridFromLog(file)
+                : _getUsernameFromLog(file);
+            return [{ path: file, account, lastModified: mtime }];
         } catch {
-            return null;
+            return [];
         }
-    }));
-
-    return stats.filter((s): s is RobloxLogFile => s !== null);
+    });
 }
 
-/** Stat de um único arquivo, ou null se não existir/inacessível. */
-export async function statFile(_: IpcMainInvokeEvent, filePath: string): Promise<{ mtimeMs: number; size: number; } | null> {
+/** @internal — só chamado pelo getRobloxLogs, não exposto como IPC handler. */
+function _getUsernameFromLog(logPath: string): string | null {
     try {
-        const stat = await fs.promises.stat(filePath);
-        return { mtimeMs: stat.mtimeMs, size: stat.size };
-    } catch {
-        return null;
-    }
+        const head = _readHead(logPath);
+        return head.match(/Players\.([^.]+)\.PlayerGui/)?.[1] ?? null;
+    } catch { return null; }
 }
 
-/** Lê um pedaço bruto de um arquivo como UTF-8, a partir de `position` por até `length` bytes. */
-export async function readFileChunk(
+/** @internal */
+function _getUseridFromLog(logPath: string): string | null {
+    try {
+        const head = _readHead(logPath);
+        return head.match(/GameJoinLoadTime[\s\S]*?userid:(\d+),/i)?.[1] ?? null;
+    } catch { return null; }
+}
+
+/** Lê os primeiros LOG_HEAD_READ_BYTES do arquivo como UTF-8. */
+function _readHead(logPath: string): string {
+    const fd = fs.openSync(logPath, "r");
+    const buffer = Buffer.alloc(LOG_HEAD_READ_BYTES);
+    const read = fs.readSync(fd, buffer, 0, LOG_HEAD_READ_BYTES, 0);
+    fs.closeSync(fd);
+    return buffer.slice(0, read).toString("utf8");
+}
+
+/**
+ * Lê o tail do log e extrai RPCs de bioma e eventos de desconexão.
+ *
+ * Retorna:
+ * - `rpcs`                — linhas completas de BloxstrapRPC, da mais antiga à mais nova
+ * - `disconnects`         — timestamps de Client:Disconnect encontrados no tail
+ * - `effectiveDisconnected` — true se o disconnect mais recente é posterior à RPC mais recente
+ */
+export function getRelevantRpcsFromLogTail(
     _: IpcMainInvokeEvent,
-    filePath: string,
-    position: number,
-    length: number
-): Promise<string> {
-    const fd = await fs.promises.open(filePath, "r");
+    logPath: string,
+): {
+    rpcs: string[];
+    disconnects: string[];
+    effectiveDisconnected: boolean;
+} {
+    const empty = { rpcs: [], disconnects: [], effectiveDisconnected: false };
+    if (!fs.existsSync(logPath)) return empty;
+
     try {
-        const buffer = Buffer.alloc(length);
-        const { bytesRead } = await fd.read(buffer, 0, length, position);
-        return buffer.subarray(0, bytesRead).toString("utf8");
-    } finally {
-        await fd.close();
+        const { size } = fs.statSync(logPath);
+        const readFrom = Math.max(0, size - LOG_TAIL_READ_BYTES);
+        const fd = fs.openSync(logPath, "r");
+        const buffer = Buffer.alloc(LOG_TAIL_READ_BYTES);
+        const bytesRead = fs.readSync(fd, buffer, 0, LOG_TAIL_READ_BYTES, readFrom);
+        fs.closeSync(fd);
+        const content = buffer.slice(0, bytesRead).toString("utf8");
+
+        // ── Disconnects ───────────────────────────────────────────────────────
+        const disconnects: string[] = [];
+        const disconnectRe = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z).*Client:Disconnect/g;
+        let m: RegExpExecArray | null;
+        while ((m = disconnectRe.exec(content))) disconnects.push(m[1]);
+        const lastDisconnectMs = disconnects.length
+            ? new Date(disconnects[disconnects.length - 1]).getTime()
+            : undefined;
+
+        // ── RPCs — busca reversa pra manter O(tail) em vez de O(file) ────────
+        const rpcs: string[] = [];
+        let searchFrom = content.length;
+        while (true) {
+            const idx = content.lastIndexOf("[BloxstrapRPC]", searchFrom);
+            if (idx === -1) break;
+            const lineStart = content.lastIndexOf("\n", idx) + 1;
+            const lineEnd = content.indexOf("\n", idx);
+            rpcs.unshift(content.substring(lineStart, lineEnd === -1 ? content.length : lineEnd));
+            searchFrom = idx - 1;
+        }
+
+        // ── effectiveDisconnected ─────────────────────────────────────────────
+        let mostRecentRpcMs: number | undefined;
+        if (rpcs.length) {
+            const ts = rpcs[rpcs.length - 1].match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)/);
+            if (ts) mostRecentRpcMs = new Date(ts[1]).getTime();
+        }
+
+        const effectiveDisconnected = lastDisconnectMs !== undefined
+            && (mostRecentRpcMs === undefined || mostRecentRpcMs <= lastDisconnectMs);
+
+        return { rpcs, disconnects, effectiveDisconnected };
+    } catch (err) {
+        console.error(`[SolRadar.Native] Error reading log tail ${logPath}:`, err);
+        return empty;
     }
 }
 

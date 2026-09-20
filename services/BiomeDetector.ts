@@ -19,8 +19,6 @@
 import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
 
-import { getRelevantRpcsFromLogTail, getRobloxLogs } from "./RobloxLogReader";
-
 const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("../native")>;
 const logger = new Logger("SolRadar.BiomeDetector");
 
@@ -183,7 +181,7 @@ class BiomeDetectorService {
     }
 
     private async _syncLogPaths(): Promise<void> {
-        const logs = await getRobloxLogs("userid");
+        const logs = await Native.getRobloxLogs("userid");
         if (!logs.length) return;
 
         const newest: Record<string, { path: string; mtime: number; }> = {};
@@ -217,7 +215,7 @@ class BiomeDetectorService {
         if (!state.logPath) return;
 
         const { rpcs, effectiveDisconnected } =
-            await getRelevantRpcsFromLogTail(state.logPath);
+            await Native.getRelevantRpcsFromLogTail(state.logPath);
 
         if (effectiveDisconnected) {
             if (state.lastKnownBiome !== undefined) {

@@ -38,8 +38,7 @@ export function PublicExportOptions({ onChange }: { onChange: (fields: Set<Redac
     };
 
     return (
-        // i have no ####### clue how to make it auto use the max width possible. width:100% did NOT work
-        // this is kind of a hack, idk if its consistent (probably not on insanely small screens)
+        // minWidth is a workaround, width: 100% did not fill the alert. May break on very small screens.
         <div style={{ minWidth: "350px", display: "flex", flexDirection: "column", gap: 2 }}>
             <Paragraph style={{ paddingBottom: 28 }}>Choose what to redact from the export:</Paragraph>
             {OPTIONS.map(({ fields, label }) => (

@@ -5,7 +5,8 @@
  */
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
-import { React, showToast, Toasts } from "@webpack/common";
+import { ToastType } from "@vencord/discord-types";
+import { React, showToast } from "@webpack/common";
 
 import { PendingActionStore } from "../../../services/ActionExecutor";
 import { settings } from "../../../settings";
@@ -18,7 +19,6 @@ const STATE_COLORS = {
 };
 
 export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => {
-    // Lê estados reativamente → causa re-render quando mudam
     const { autoJoinEnabled, notificationEnabled, pluginIconShortcutAction, hideInactiveIndicator } = settings.use([
         "autoJoinEnabled",
         "notificationEnabled",
@@ -28,7 +28,7 @@ export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => 
 
     if (!isMainChat || settings.store.pluginIconLocation !== "chatbar") return null;
 
-    const isActive = autoJoinEnabled; // ou ajuste a lógica se quiser considerar notificationEnabled também
+    const isActive = autoJoinEnabled;
 
     const handleClick = () => {
         openSolsRadarModal();
@@ -38,33 +38,32 @@ export const SolsRadarChatBarButton: ChatBarButtonFactory = ({ isMainChat }) => 
         e.preventDefault();
 
         let message = "No action taken.";
-        let toastType = Toasts.Type.MESSAGE;
+        let toastType: ToastType = "message";
 
         switch (pluginIconShortcutAction) {
             case "toggle_join":
                 const newJoin = !autoJoinEnabled;
                 settings.store.autoJoinEnabled = newJoin;
                 message = `Auto-join ${newJoin ? "enabled" : "disabled"}!`;
-                toastType = newJoin ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE;
+                toastType = newJoin ? "success" : "message";
                 break;
 
             case "toggle_notification":
                 const newNotif = !notificationEnabled;
                 settings.store.notificationEnabled = newNotif;
                 message = `Notifications ${newNotif ? "enabled" : "disabled"}!`;
-                toastType = newNotif ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE;
+                toastType = newNotif ? "success" : "message";
                 break;
 
             case "toggle_both":
-                const newState = !autoJoinEnabled; // usa autoJoin como referência
+                const newState = !autoJoinEnabled; // auto-join decides the new state for both
                 settings.store.autoJoinEnabled = newState;
                 settings.store.notificationEnabled = newState;
                 message = `Auto-join and notifications ${newState ? "enabled" : "disabled"}!`;
-                toastType = newState ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE;
+                toastType = newState ? "success" : "message";
                 break;
 
             default:
-                // sem ação → toast neutro
                 break;
         }
 

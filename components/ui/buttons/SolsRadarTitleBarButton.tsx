@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { ToastType } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { React, showToast, Toasts, useState } from "@webpack/common";
+import { React, showToast, useState } from "@webpack/common";
 
 import { PendingActionStore } from "../../../services/ActionExecutor";
 import { settings } from "../../../settings";
@@ -46,21 +47,21 @@ export function SolsRadarTitleBarButton({ className = "" }: SolsRadarTitleBarBut
         e.preventDefault();
 
         let message = "No action taken.";
-        let toastType = Toasts.Type.MESSAGE;
+        let toastType: ToastType = "message";
 
         switch (pluginIconShortcutAction) {
             case "toggle_join":
                 const newJoin = !autoJoinEnabled;
                 settings.store.autoJoinEnabled = newJoin;
                 message = `Auto-join ${newJoin ? "enabled" : "disabled"}!`;
-                toastType = newJoin ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE;
+                toastType = newJoin ? "success" : "message";
                 break;
 
             case "toggle_notification":
                 const newNotif = !notificationEnabled;
                 settings.store.notificationEnabled = newNotif;
                 message = `Notifications ${newNotif ? "enabled" : "disabled"}!`;
-                toastType = newNotif ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE;
+                toastType = newNotif ? "success" : "message";
                 break;
 
             case "toggle_both":
@@ -68,7 +69,7 @@ export function SolsRadarTitleBarButton({ className = "" }: SolsRadarTitleBarBut
                 settings.store.autoJoinEnabled = newState;
                 settings.store.notificationEnabled = newState;
                 message = `Auto-join and notifications ${newState ? "enabled" : "disabled"}!`;
-                toastType = newState ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE;
+                toastType = newState ? "success" : "message";
                 break;
 
             default:

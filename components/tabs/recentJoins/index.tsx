@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Button } from "@components/Button";
+import "./history.css";
+
+import { DeleteIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
-import { React, TextInput, useEffect, useState } from "@webpack/common";
+import { Alerts, ContextMenuApi, Menu, React, ScrollerThin, TextInput, Tooltip, useState } from "@webpack/common";
 
 import { settings } from "../../../settings";
 import { SnipeEntry, SnipeStore, useSnipeHistory } from "../../../stores/SnipeStore";
@@ -16,343 +18,301 @@ import { formatElapsedTime } from "../../../utils";
 import { JoinLockBanner } from "../../JoinLockBanner";
 import { PendingActionBanner } from "../../PendingActionBanner";
 import { DeleteButton } from "../../ui/buttons/DeleteButton";
-import { QuickFilterBtn } from "../../ui/buttons/QuickFilterBtn";
-import { PillVariant } from "../../ui/Pill";
 import Spoiler from "../../ui/Spoiler";
-import { DANGER_TAGS, FallbackImage, formatTimeAgo, TagBadge } from "./components";
-import {
-    openJoinModal,
-} from "./JoinModal";
+import { COLORS } from "../../ui/styles";
+import { useShiftHeld } from "../../ui/useShiftHeld";
+import { FallbackImage, formatClock, getSnipeStatus } from "./components";
+import { openJoinModal } from "./JoinModal";
 import { openSnipeContextMenu } from "./SnipeContextMenu";
 
-// ─── Card styling ─────────────────────────────────────────────────────────────
+// --- Filters ---
 
-function cardBorderColor(entry: SnipeEntry): string {
-    // new
-    // if (entry.tags.some(t => DANGER_TAGS.has(t))) return "color-mix(in srgb, var(--red-400) 35%, transparent)";
-    // if (entry.tags.includes("biome-verified-real")) return "color-mix(in srgb, var(--green-360) 35%, transparent)";
-    // return "var(--background-mod-normal)";
+type Filter = SnipeTag | "all";
 
-    // old
-    if (entry.tags.some(t => DANGER_TAGS.has(t))) return "rgba(237, 66, 69, 0.3)";
-    if (entry.tags.includes("biome-verified-real")) return "rgba(59, 165, 92, 0.3)";
-    return "rgba(255, 255, 255, 0.1)";
+const FILTERS: { tag: Filter; label: string; color?: string; }[] = [
+    { tag: "all", label: "All" },
+    { tag: "biome-verified-real", label: "Real", color: COLORS.positive },
+    { tag: "biome-verified-bait", label: "Bait", color: COLORS.danger },
+    { tag: "biome-verified-timeout", label: "Timed out", color: COLORS.warning },
+    { tag: "link-verified-unsafe", label: "Unsafe link", color: COLORS.danger },
+    { tag: "failed", label: "Failed", color: COLORS.danger },
+];
+
+const MAX_STAGGER_MS = 300;
+
+function countFor(entries: SnipeEntry[], tag: Filter): number {
+    return tag === "all" ? entries.length : entries.filter(e => e.tags.includes(tag)).length;
 }
 
-function cardBg(entry: SnipeEntry): string {
-    // new style
-    // if (entry.tags.some(t => DANGER_TAGS.has(t))) return "color-mix(in srgb, var(--red-400) 5%, var(--background-secondary))";
-    // if (entry.tags.includes("biome-verified-real")) return "color-mix(in srgb, var(--green-360) 5%, var(--background-secondary))";
-    // return "var(--background-secondary)";
-
-    // old style
-    if (entry.tags.some(t => DANGER_TAGS.has(t))) return "rgba(237, 66, 69, 0.1)";
-    if (entry.tags.includes("biome-verified-real")) return "rgba(59, 165, 92, 0.1)";
-    return "rgba(67, 67, 67, 0.1)";
+function dayLabel(ts: number): string {
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
+    const days = Math.floor((startOfToday - new Date(ts).setHours(0, 0, 0, 0)) / 86_400_000);
+    if (days <= 0) return "Today";
+    if (days === 1) return "Yesterday";
+    return new Date(ts).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
-// ─── JoinCard ─────────────────────────────────────────────────────────────────
+function timeAgo(ts: number): string {
+    const minutes = Math.floor((Date.now() - ts) / 60_000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+}
 
-function JoinCard({ entry, shiftHeld, onClick, onContextMenu }: {
-    entry: SnipeEntry;
-    shiftHeld: boolean;
-    onClick: () => void;
-    onContextMenu: (e: React.MouseEvent) => void;
-}) {
-    const [hovered, setHovered] = useState(false);
-    const visibleTags = entry.tags.slice(0, 3);
-    const extra = entry.tags.length - visibleTags.length;
+// --- Icons ---
+
+function FilterIcon() {
+    return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 6h16M7 12h10M10 18h4" />
+        </svg>
+    );
+}
+
+function MoreIcon() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="19" cy="12" r="2" />
+        </svg>
+    );
+}
+
+// --- Menus ---
+
+function confirmClearHistory() {
+    Alerts.show({
+        title: "Clear snipe history?",
+        body: <Paragraph>This deletes every snipe in Snipe History and resets the stats. It can't be undone.</Paragraph>,
+        confirmText: "Clear history",
+        cancelText: "Cancel",
+        onConfirm: () => SnipeStore.clear(),
+    });
+}
+
+function openFilterMenu(e: React.MouseEvent, entries: SnipeEntry[], current: Filter, onChange: (f: Filter) => void) {
+    ContextMenuApi.openContextMenu(e, () => (
+        <Menu.Menu navId="vc-sora-history-filter" onClose={ContextMenuApi.closeContextMenu} aria-label="Filter snipes">
+            {FILTERS.map(f => (
+                <Menu.MenuRadioItem
+                    key={f.tag}
+                    id={`vc-sora-history-filter-${f.tag}`}
+                    group="vc-sora-history-filter"
+                    label={`${f.label} (${countFor(entries, f.tag)})`}
+                    checked={current === f.tag}
+                    action={() => onChange(f.tag)}
+                />
+            ))}
+        </Menu.Menu>
+    ));
+}
+
+function openMoreMenu(e: React.MouseEvent, hasEntries: boolean) {
+    ContextMenuApi.openContextMenu(e, () => (
+        <Menu.Menu navId="vc-sora-history-more" onClose={ContextMenuApi.closeContextMenu} aria-label="Snipe history options">
+            <Menu.MenuItem
+                id="vc-sora-history-clear"
+                label="Clear history"
+                color="danger"
+                disabled={!hasEntries}
+                leadingAccessory={{ type: "icon", icon: DeleteIcon }}
+                action={confirmClearHistory}
+            />
+        </Menu.Menu>
+    ));
+}
+
+// --- Card ---
+
+function Hidden({ anonymize, children }: { anonymize: boolean; children: React.ReactNode; }) {
+    return anonymize ? <Spoiler>{children}</Spoiler> : <>{children}</>;
+}
+
+function SnipeCard({ entry, index, shiftHeld }: { entry: SnipeEntry; index: number; shiftHeld: boolean; }) {
     const { anonymizeEverything } = settings.use(["anonymizeEverything"]);
+    const status = getSnipeStatus(entry);
+    const isReal = entry.tags.includes("biome-verified-real");
+
+    // Each field shortens on its own, with the full value in a tooltip
+    const field = (className: string, tip: string, content: React.ReactNode) => (
+        <Tooltip text={tip}>
+            {props => (
+                <span {...props} className={`vc-sora-history-field ${className}`}>
+                    <Hidden anonymize={anonymizeEverything}>{content}</Hidden>
+                </span>
+            )}
+        </Tooltip>
+    );
+    const sep = <span className="vc-sora-history-sep">·</span>;
 
     return (
         <div
-            onClick={onClick}
-            onContextMenu={e => { e.preventDefault(); onContextMenu(e); }}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            title="Left click for details · Right click for more options"
-            style={{
-                borderRadius: 8,
-                border: `1px solid ${cardBorderColor(entry)}`,
-                background: cardBg(entry),
-                cursor: "pointer",
-                overflow: "hidden",
-                transition: "filter 0.1s",
-                filter: hovered ? "brightness(1.1)" : "none",
-                userSelect: "none",
-                position: "relative", // necessário pro botão
-            }}
+            className={`vc-sora-history-row${status.quiet ? " quiet" : ""}`}
+            style={{ "--sora-s": status.color, animationDelay: `${Math.min(index * 30, MAX_STAGGER_MS)}ms` } as React.CSSProperties}
         >
-            {/* DELETE BUTTON */}
-            {shiftHeld && (
-                <DeleteButton
-                    visible={hovered}
-                    hint="Delete this entry"
-                    onClick={() => SnipeStore.delete(entry.id)}
-                />
-            )}
+            <span className="vc-sora-history-time">{formatClock(entry.timestamp)}</span>
+            <span className="vc-sora-history-rail" />
+            <div
+                className="vc-sora-history-card"
+                onClick={() => openJoinModal(entry)}
+                onContextMenu={e => { e.preventDefault(); openSnipeContextMenu(e, entry); }}
+            >
+                {shiftHeld && <DeleteButton visible hint="Remove from history" onClick={() => SnipeStore.delete(entry.id)} />}
+                <Tooltip text={status.label}>
+                    {props => (
+                        <div {...props} className="vc-sora-history-icon">
+                            <FallbackImage src={entry.iconUrl} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />
+                        </div>
+                    )}
+                </Tooltip>
 
-            {/* Main row */}
-            <div style={{ padding: "10px 14px", display: "flex", gap: 12, alignItems: "flex-start" }}>
-                <FallbackImage
-                    src={entry.iconUrl}
-                    style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
-                />
-
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                        fontWeight: 600,
-                        fontSize: 14,
-                        color: "var(--control-secondary-text-default)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        marginBottom: 2,
-                    }}>
-                        {entry.triggerName}
-                    </div>
-
-                    {/* Channel info */}
-                    <div style={{
-                        fontSize: 12,
-                        color: "var(--text-muted)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        marginBottom: 6,
-                    }}>
-                        {anonymizeEverything
-                            ? <Spoiler>
-                                <span>{[entry.channelName && `#${entry.channelName}`, entry.guildName].filter(Boolean).join(" · ")}</span>
-                            </Spoiler>
-                            : [entry.channelName && `#${entry.channelName}`, entry.guildName].filter(Boolean).join(" · ")}
-                    </div>
-
-                    <div style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        fontSize: 12,
-                        color: "var(--text-muted)"
-                    }}>
-                        {anonymizeEverything
-                            ? (
-                                <Spoiler style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                    <FallbackImage
-                                        src={entry.authorAvatarUrl}
-                                        style={{ width: 16, height: 16, borderRadius: "50%" }}
-                                    />
-                                    <span>{entry.authorName}</span>
-                                    <span>· {formatTimeAgo(entry.timestamp)}</span>
-                                </Spoiler>
-                            )
-                            : entry.authorName && (
-                                <>
-                                    <FallbackImage
-                                        src={entry.authorAvatarUrl}
-                                        style={{ width: 16, height: 16, borderRadius: "50%" }}
-                                    />
-                                    <span>{entry.authorName}</span>
-                                    <span>· {formatTimeAgo(entry.timestamp)}</span>
-                                </>
-                            )
-                        }
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 1 }}>
+                    <span className="vc-sora-history-title">{entry.triggerName}</span>
+                    <div className="vc-sora-history-line">
+                        {entry.authorName && <>
+                            {field("author", `Posted by ${entry.authorName}`, (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, maxWidth: "100%" }}>
+                                    <FallbackImage src={entry.authorAvatarUrl} style={{ width: 16, height: 16, borderRadius: "50%", flexShrink: 0 }} />
+                                    <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{entry.authorName}</span>
+                                </span>
+                            ))}
+                            {(entry.channelName || entry.guildName) && sep}
+                        </>}
+                        {entry.channelName && <>
+                            {field("channel", `#${entry.channelName}`, `#${entry.channelName}`)}
+                            {entry.guildName && sep}
+                        </>}
+                        {entry.guildName && field("server", entry.guildName, entry.guildName)}
                     </div>
                 </div>
 
-                <span style={{
-                    color: "var(--text-muted)",
-                    fontSize: 18,
-                    flexShrink: 0,
-                    alignSelf: "center"
-                }}>
-                    ›
-                </span>
-            </div>
-
-            {/* Tags footer */}
-            {(visibleTags.length > 0 || entry.metrics) && (
-                <div style={{
-                    borderTop: "1px solid var(--background-mod-normal)",
-                    padding: "6px 14px",
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                }}>
-                    {visibleTags.map(t => <TagBadge key={t} tag={t} />)}
-
-                    {extra > 0 && (
-                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                            +{extra}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center", gap: 1, flexShrink: 0, fontSize: 11.5, color: COLORS.muted, fontVariantNumeric: "tabular-nums" }}>
+                    <span>{timeAgo(entry.timestamp)}</span>
+                    {(entry.metrics || (isReal && entry.biomeDurationMs != null)) && (
+                        <span style={{ display: "flex", gap: 8 }}>
+                            {entry.metrics && (
+                                <Tooltip text="Time from the message to launching Roblox">
+                                    {props => <span {...props}>⚡ {Math.round(entry.metrics!.timeToJoinMs)}ms</span>}
+                                </Tooltip>
+                            )}
+                            {isReal && entry.biomeDurationMs != null && (
+                                <Tooltip text="How long the real biome lasted">
+                                    {props => <span {...props}>🌿 {formatElapsedTime(entry.biomeDurationMs!)}</span>}
+                                </Tooltip>
+                            )}
                         </span>
                     )}
-
-                    <div style={{
-                        marginLeft: "auto",
-                        display: "flex",
-                        gap: 8,
-                        alignItems: "center"
-                    }}>
-                        {entry.biomeDurationMs != null && entry.tags.includes("biome-verified-real") && (
-                            <span style={{
-                                fontSize: 11,
-                                color: "var(--text-muted)",
-                                fontVariantNumeric: "tabular-nums"
-                            }}>
-                                🌿 Lasted {formatElapsedTime(entry.biomeDurationMs)}
-                            </span>
-                        )}
-
-                        {entry.metrics && (
-                            <span style={{
-                                fontSize: 11,
-                                color: "var(--text-muted)",
-                                fontVariantNumeric: "tabular-nums"
-                            }}>
-                                ⚡ Joined in {formatElapsedTime(entry.metrics.timeToJoinMs)}
-                            </span>
-                        )}
-                    </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 }
-// ─── RecentJoinsTab ───────────────────────────────────────────────────────────
 
-const FILTER_OPTIONS: { tagName: SnipeTag | "all"; label: string; variant: PillVariant; }[] = [
-    { tagName: "all", label: "All", variant: "brand" },
-    { tagName: "biome-verified-real", label: "Biome Real", variant: "green" },
-    { tagName: "biome-verified-bait", label: "Biome Bait", variant: "red" },
-    { tagName: "biome-verified-timeout", label: "Biome Timed Out", variant: "yellow" },
-    { tagName: "link-verified-unsafe", label: "Link Unsafe", variant: "red" },
-    { tagName: "failed", label: "Failed", variant: "red" },
-];
+// --- RecentJoinsTab ---
 
 export function RecentJoinsTab() {
     const entries = useSnipeHistory();
-
     const saved = UIState.get("recentJoins");
-    const [shiftHeld, setShiftHeld] = useState(false);
+    const shiftHeld = useShiftHeld();
     const [search, setSearch] = useState(saved.search);
-    const [filter, setFilter] = useState<SnipeTag | "all">(saved.tagFilter);
+    const [filter, setFilter] = useState<Filter>(saved.tagFilter);
 
-    useEffect(() => {
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Shift") setShiftHeld(true);
-        };
-        const onKeyUp = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
-        const onBlur = () => setShiftHeld(false);
-        window.addEventListener("keydown", onKeyDown);
-        window.addEventListener("keyup", onKeyUp);
-        window.addEventListener("blur", onBlur);
-        return () => {
-            window.removeEventListener("keydown", onKeyDown);
-            window.removeEventListener("keyup", onKeyUp);
-            window.removeEventListener("blur", onBlur);
-        };
-    }, []);
-
-    const handleSearchChange = (v: string) => {
+    const handleSearch = (v: string) => {
         setSearch(v);
         UIState.set("recentJoins", { search: v });
     };
 
-    const handleFilterChange = (f: SnipeTag | "all") => {
+    const handleFilter = (f: Filter) => {
         setFilter(f);
         UIState.set("recentJoins", { tagFilter: f });
     };
 
     const filtered = React.useMemo(() => {
-        let result = entries;
-        if (filter !== "all") {
-            result = result.filter(e => e.tags.includes(filter as SnipeTag));
-        }
-        if (search.trim()) {
-            const q = search.toLowerCase();
-            result = result.filter(e =>
-                e.triggerName.toLowerCase().includes(q) ||
-                e.authorName?.toLowerCase().includes(q) ||
-                e.channelName?.toLowerCase().includes(q) ||
-                e.guildName?.toLowerCase().includes(q)
-            );
-        }
-        return result;
+        const q = search.trim().toLowerCase();
+        return entries.filter(e =>
+            (filter === "all" || e.tags.includes(filter))
+            && (!q || [e.triggerName, e.authorName, e.channelName, e.guildName].some(v => v?.toLowerCase().includes(q)))
+        );
     }, [entries, filter, search]);
+
+    const activeFilter = FILTERS.find(f => f.tag === filter) ?? FILTERS[0];
+
+    // Group consecutive entries (newest first) under a day heading
+    let lastDay = "";
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 8 }}>
-
-            {/* Filters */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                <div style={{ width: "100%", flex: 1 }}>
-                    <TextInput
-                        value={search}
-                        onChange={handleSearchChange}
-                        placeholder="Search by trigger, author, channel..."
-                    />
-                </div>
-                <div style={{ width: "100%", display: "flex", gap: 4 }}>
-                    {FILTER_OPTIONS.map(f => (
-                        <QuickFilterBtn
-                            key={f.tagName}
-                            label={f.label}
-                            variant={f.variant}
-                            active={filter === f.tagName}
-                            onClick={() => handleFilterChange(f.tagName)}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <TextInput
+                            value={search}
+                            onChange={handleSearch}
+                            placeholder={`Search ${entries.length} ${entries.length === 1 ? "snipe" : "snipes"} by trigger, author, channel...`}
                         />
-                    ))}
+                    </div>
+                    <Tooltip text="Filter by result">
+                        {props => (
+                            <button
+                                {...props}
+                                type="button"
+                                className={`vc-sora-history-sbtn${filter !== "all" ? " active" : ""}`}
+                                style={{ "--sora-c": activeFilter.color ?? COLORS.brand } as React.CSSProperties}
+                                onClick={e => openFilterMenu(e, entries, filter, handleFilter)}
+                            >
+                                <FilterIcon />
+                                {activeFilter.label}
+                                {filter !== "all" && <span style={{ fontSize: 11, opacity: 0.8 }}>{filtered.length}</span>}
+                            </button>
+                        )}
+                    </Tooltip>
+                    <Tooltip text="More options">
+                        {props => (
+                            <button
+                                {...props}
+                                type="button"
+                                className="vc-sora-history-sbtn"
+                                style={{ padding: "0 7px" }}
+                                aria-label="More options"
+                                onClick={e => openMoreMenu(e, entries.length > 0)}
+                            >
+                                <MoreIcon />
+                            </button>
+                        )}
+                    </Tooltip>
                 </div>
                 <JoinLockBanner variant="minimal" />
                 <PendingActionBanner variant="minimal" />
             </div>
 
-            {/* List */}
-            <div style={{ flex: 1, overflowY: "auto", scrollbarColor: "var(--text-muted) transparent", scrollbarWidth: "thin", scrollMarginLeft: 8 }}>
-                {filtered.length === 0
-                    ? (
-                        <div style={{ textAlign: "center", marginTop: 40 }}>
-                            <Paragraph size="sm">
-                                {entries.length === 0
-                                    ? "No joins yet. Links you snipe will appear here."
-                                    : "No results match your filters."}
-                            </Paragraph>
-                        </div>
-                    )
-                    : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {filtered.map(e => (
-                                <JoinCard
-                                    key={e.id}
-                                    entry={e}
-                                    shiftHeld={shiftHeld}
-                                    onClick={() => openJoinModal(e)}
-                                    onContextMenu={ev => openSnipeContextMenu(ev, e)}
-                                />
-                            ))}
-                        </div>
-                    )
-                }
-            </div>
-
-            {/* Footer */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, marginBottom: 12 }}>
-                <Paragraph>
-                    {filtered.length === entries.length
-                        ? `${entries.length} join${entries.length !== 1 ? "s" : ""}`
-                        : `${filtered.length} of ${entries.length}`}
-                </Paragraph>
-                <div style={{ display: "flex", gap: 4 }}>
-                    {entries.length > 0 && (
-                        <Button variant="dangerPrimary" size="small" onClick={() => SnipeStore.clear()}>
-                            Clear all
-                        </Button>
-                    )}
-                </div>
-
-            </div>
-
+            <ScrollerThin style={{ flex: 1, paddingRight: 8 }}>
+                {filtered.length === 0 ? (
+                    <div style={{ textAlign: "center", marginTop: 40 }}>
+                        <Paragraph size="sm">
+                            {entries.length === 0
+                                ? "No snipes yet. Links you snipe will show up here."
+                                : "No snipes match your search or filter."}
+                        </Paragraph>
+                    </div>
+                ) : (
+                    <div style={{ paddingBottom: 12 }}>
+                        {filtered.map((entry, i) => {
+                            const day = dayLabel(entry.timestamp);
+                            const heading = day !== lastDay ? <div className="vc-sora-history-day">{day}</div> : null;
+                            lastDay = day;
+                            return (
+                                <React.Fragment key={entry.id}>
+                                    {heading}
+                                    <SnipeCard entry={entry} index={i} shiftHeld={shiftHeld} />
+                                </React.Fragment>
+                            );
+                        })}
+                    </div>
+                )}
+            </ScrollerThin>
         </div>
     );
 }

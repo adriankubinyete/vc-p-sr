@@ -1,4 +1,4 @@
-/* ─── Layout ──────────────────────────────────────────────────────────────── */
+/* --- Layout --- */
 
 .vc-sora-chip-wrapper {
     display: flex;
@@ -22,7 +22,7 @@
     margin-top: 2px;
 }
 
-/* ─── Entry list ──────────────────────────────────────────────────────────── */
+/* --- Entry list --- */
 
 .vc-sora-chip-list {
     display: flex;
@@ -89,7 +89,7 @@
     cursor: text;
 }
 
-/* ─── Remove button (FIXED) ──────────────────────────────────────────────── */
+/* --- Remove button --- */
 
 .vc-sora-chip-remove {
     display: flex;
@@ -129,7 +129,7 @@
     transform: scale(0.9);
 }
 
-/* ─── Input row ───────────────────────────────────────────────────────────── */
+/* --- Input row --- */
 
 .vc-sora-chip-input-row {
     display: flex;
@@ -142,7 +142,7 @@
     flex: 1;
 }
 
-/* ─── Feedback ────────────────────────────────────────────────────────────── */
+/* --- Feedback --- */
 
 .vc-sora-chip-ready {
     margin-top: 6px;

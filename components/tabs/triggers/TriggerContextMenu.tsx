@@ -16,7 +16,7 @@ import {
     UploadIcon,
 } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
-import { Alerts, ContextMenuApi, Menu, React, showToast, Toasts } from "@webpack/common";
+import { Alerts, ContextMenuApi, Menu, React, showToast } from "@webpack/common";
 
 import { deleteTrigger, downloadTriggerJson, duplicateTrigger, toggleTrigger,Trigger } from "../../../stores/TriggerStore";
 import { isDeveloper } from "../../../utils";
@@ -31,7 +31,7 @@ function confirmRemoveTrigger(trigger: Trigger): void {
         cancelText: "Cancel",
         onConfirm: async () => {
             await deleteTrigger(trigger.id);
-            showToast("Trigger removed.", Toasts.Type.MESSAGE);
+            showToast("Trigger removed.", "message");
         },
     });
 }

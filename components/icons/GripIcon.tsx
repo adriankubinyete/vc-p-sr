@@ -6,10 +6,8 @@
 
 import { IconComponent } from "@utils/types";
 
-// Eight-dot "grip" glyph (4 rows × 2 cols), used as the drag handle for
-// reordering triggers. Same dot size/spacing as a standard 6-dot grip
-// (r=1.3, 5-unit row gap, 6-unit column gap) — the viewBox is just extended
-// to fit more rows, not compressed to fit a fixed height (that looked squished).
+// 8-dot grip (4 rows x 2 cols) for dragging triggers. Same dots and spacing as a
+// standard 6-dot grip, with a taller viewBox instead of squeezed rows.
 export const GripIcon: IconComponent = ({ height = 21, width = 16, className, color }) => {
     return (
         <svg

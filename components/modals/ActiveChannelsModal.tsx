@@ -6,13 +6,13 @@
 
 import { Button } from "@components/Button";
 import { Divider } from "@components/Divider";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { GuildStore, React, TextInput } from "@webpack/common";
 
 import { ActiveChannel, ActiveChannelStore } from "../../stores/ActiveChannelStore";
 import { formatElapsedTime } from "../../utils";
+import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "../ui/LegacyModal";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 interface GuildSummary {
     guildId: string;
@@ -20,7 +20,7 @@ interface GuildSummary {
     channels: ActiveChannel[];
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// --- Helpers ---
 
 function groupByGuild(channels: ActiveChannel[]): GuildSummary[] {
     const map = new Map<string, GuildSummary>();
@@ -40,7 +40,7 @@ function guildIconUrl(guildId: string, iconHash: string): string {
     return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.webp?size=64`;
 }
 
-// ─── Guild icon ───────────────────────────────────────────────────────────────
+// --- Guild icon ---
 
 function GuildIcon({ guildId, guildName, size }: { guildId: string; guildName: string; size: number; }) {
     const icon = GuildStore.getGuild(guildId)?.icon ?? null;
@@ -68,7 +68,7 @@ function GuildIcon({ guildId, guildName, size }: { guildId: string; guildName: s
     );
 }
 
-// ─── Rows ─────────────────────────────────────────────────────────────────────
+// --- Rows ---
 
 function ServerRow({ guild, onClick }: { guild: GuildSummary; onClick: () => void; }) {
     const withLinks = guild.channels.filter(ch => ch.lastLinkAt !== null).length;
@@ -129,7 +129,7 @@ function ChannelRow({ ch }: { ch: ActiveChannel; }) {
     );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// --- Modal ---
 
 const headerTitle: React.CSSProperties = { fontWeight: 700, fontSize: "1rem", flex: 1, color: "var(--text-default)" };
 const sectionLabel: React.CSSProperties = { fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" };
@@ -153,7 +153,7 @@ export function ActiveChannelsModal({ modalProps }: { modalProps: ModalProps; })
 
     const q = search.toLowerCase();
 
-    // ── Channel view ──────────────────────────────────────────────────────────
+    // --- Channel view ---
     if (selectedGuild) {
         const filtered = selectedGuild.channels.filter(ch => !q || ch.channelName.toLowerCase().includes(q));
         const withLinks = filtered.filter(ch => ch.lastLinkAt !== null);
@@ -183,7 +183,7 @@ export function ActiveChannelsModal({ modalProps }: { modalProps: ModalProps; })
 
                     {aliveOnly.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                            <span style={sectionLabel}>Alive — no links ({aliveOnly.length})</span>
+                            <span style={sectionLabel}>Alive, no links ({aliveOnly.length})</span>
                             {aliveOnly.map(ch => <ChannelRow key={ch.channelId} ch={ch} />)}
                         </div>
                     )}
@@ -201,7 +201,7 @@ export function ActiveChannelsModal({ modalProps }: { modalProps: ModalProps; })
         );
     }
 
-    // ── Server list view ──────────────────────────────────────────────────────
+    // --- Server list view ---
     const filteredGuilds = guilds.filter(g =>
         !q ||
         g.guildName.toLowerCase().includes(q) ||
@@ -229,7 +229,7 @@ export function ActiveChannelsModal({ modalProps }: { modalProps: ModalProps; })
                     }
                 </div>
                 <span style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5, marginTop: 4 }}>
-                    These channels received messages intercepted by the plugin — it does not confirm Discord is delivering events for all channels you're in. Unloaded or inactive channels may be silent even if monitored.
+                    These channels received messages intercepted by the plugin. It does not confirm Discord is delivering events for all channels you're in. Unloaded or inactive channels may be silent even if monitored.
                 </span>
             </ModalContent>
             <ModalFooter>

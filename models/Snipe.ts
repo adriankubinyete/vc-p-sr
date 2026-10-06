@@ -4,22 +4,19 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Logger } from "@utils/Logger";
 import { Channel, Guild, Message } from "@vencord/discord-types";
 import { UserStore } from "@webpack/common";
 
+import { Logger } from "../logger";
 import { buildJoinUri } from "../services/RobloxService";
 import { SnipeStore } from "../stores/SnipeStore";
-import { SnipeMetrics, SnipeTag } from "../types";
-import { SnipableLink, Trigger } from "../types";
+import { SnipableLink, SnipeMetrics, SnipeTag, Trigger } from "../types";
 
 const logger = new Logger("SolRadar.Model/Snipe");
 
-// ─── Snipe ────────────────────────────────────────────────────────────────────
-//
-// Handle de escrita para uma SnipeEntry no store.
-// Criado quando uma mensagem bate em um trigger — carrega as referências
-// vivas do ciclo (trigger, channel, guild, link), que não são serializadas.
+// --- Snipe ---
+// Created when a message matches a trigger. Writes to its SnipeEntry in the store and
+// holds the live objects (trigger, channel, guild, link) that are not saved.
 
 export class Snipe {
     readonly id: number;
@@ -79,7 +76,7 @@ export class Snipe {
         return new Snipe(id, trigger, message, channel, guild, link, tMessageReceived);
     }
 
-    // ── Link ──────────────────────────────────────────────────────────────────
+    // --- Link ---
 
     markAsLinkSafe() { this._tag("link-verified-safe"); }
     markAsLinkUnsafe() { this._tag("link-verified-unsafe"); }
@@ -91,7 +88,7 @@ export class Snipe {
         return tags.includes("link-verified-safe");
     }
 
-    // ── Biome ─────────────────────────────────────────────────────────────────
+    // --- Biome ---
 
     markAsBiomeReal() { this._tag("biome-verified-real"); }
     markAsBiomeBait() { this._tag("biome-verified-bait"); }
@@ -100,7 +97,7 @@ export class Snipe {
     markAsRedundantBiome() { this._tag("redundant-biome-ignored"); }
     markAsRedundancyBypassed() { this._tag("redundant-biome-bypassed"); }
 
-    // ── Join ──────────────────────────────────────────────────────────────────
+    // --- Join ---
 
     markAsFailed() { this._tag("failed"); }
 
@@ -125,13 +122,13 @@ export class Snipe {
         return SnipeStore.getById(this.id)?.processedMessageText ?? "";
     }
 
-    // ── Interno ───────────────────────────────────────────────────────────────
+    // --- Internals ---
 
     private _tag(...tags: SnipeTag[]) {
         SnipeStore.addTags(this.id, ...tags);
     }
 
-    // ── Log ───────────────────────────────────────────────────────────────────
+    // --- Log ---
 
     log(message: string) { this._log("debug", message); }
     logInfo(message: string) { this._log("info", message); }

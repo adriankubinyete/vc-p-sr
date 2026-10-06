@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Logger } from "@utils/Logger";
-
+import { Logger } from "../logger";
 import { Snipe } from "../models/Snipe";
 import { settings } from "../settings";
 import { parseCsv, sendWebhook } from "../utils";
@@ -18,21 +17,21 @@ export function canForward(snipe: Snipe): boolean {
     const webhookUrl = snipe.trigger.forwarding.webhookUrl || settings.store.globalWebhookUrl;
     if (!webhookUrl) {
         logger.warn(`[${snipe.trigger.name}] Forwarding enabled but no webhook URL configured (trigger or global).`);
-        snipe.logWarn("Forward skipped — no webhook URL configured.");
+        snipe.logWarn("Forward skipped: no webhook URL configured.");
         return false;
     }
 
     const excludedGuilds = snipe.trigger.forwarding.excludedGuilds ?? [];
     if (excludedGuilds.includes(snipe.guild.id)) {
-        logger.info(`[${snipe.trigger.name}] Skipping forward — guild ${snipe.guild.id} is excluded.`);
-        snipe.logInfo(`Forward skipped — guild "${snipe.guild.name}" is excluded.`);
+        logger.info(`[${snipe.trigger.name}] Skipping forward: guild ${snipe.guild.id} is excluded.`);
+        snipe.logInfo(`Forward skipped: guild "${snipe.guild.name}" is excluded.`);
         return false;
     }
 
     const excludedChannels = snipe.trigger.forwarding.excludedChannels ?? [];
     if (excludedChannels.includes(snipe.channel.id)) {
-        logger.info(`[${snipe.trigger.name}] Skipping forward — channel ${snipe.channel.id} is excluded.`);
-        snipe.logInfo(`Forward skipped — channel "#${snipe.channel.name}" is excluded.`);
+        logger.info(`[${snipe.trigger.name}] Skipping forward: channel ${snipe.channel.id} is excluded.`);
+        snipe.logInfo(`Forward skipped: channel "#${snipe.channel.name}" is excluded.`);
         return false;
     }
 
@@ -40,8 +39,8 @@ export function canForward(snipe: Snipe): boolean {
     if (!bypassForwardIgnoredGuilds) {
         const ignoredGuilds = parseCsv(settings.store.forwardIgnoredGuilds);
         if (ignoredGuilds.has(snipe.guild.id)) {
-            logger.info(`[${snipe.trigger.name}] Skipping forward — guild ${snipe.guild.id} is globally ignored.`);
-            snipe.logInfo(`Forward skipped — guild "${snipe.guild.name}" is globally ignored.`);
+            logger.info(`[${snipe.trigger.name}] Skipping forward: guild ${snipe.guild.id} is globally ignored.`);
+            snipe.logInfo(`Forward skipped: guild "${snipe.guild.name}" is globally ignored.`);
             return false;
         }
     }
@@ -69,7 +68,7 @@ export async function forwardSnipe(snipe: Snipe, kind: ForwardKind = "match"): P
         content: customMessageContent || null,
         embeds: [{
             title: isDetection
-                ? `✅ ${snipe.trigger.name} — Biome Confirmed`
+                ? `✅ ${snipe.trigger.name}: Biome Confirmed`
                 : `🎯 ${snipe.trigger.name} (click to join)`,
             description: embedDescription,
             url: snipe.link.link,

@@ -5,8 +5,8 @@
  */
 
 import { showNotification } from "@api/Notifications";
-import { Logger } from "@utils/Logger";
 
+import { Logger } from "../logger";
 import { Snipe } from "../models/Snipe";
 import { settings } from "../settings";
 import { JoinLockStore } from "../stores/JoinLockStore";
@@ -19,7 +19,7 @@ import { closeGame, getPlaceId } from "./RobloxService";
 
 const logger = new Logger("SolRadar:Join");
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 type VerifyLinkResult =
     | { ok: true; placeId: string; }
@@ -29,7 +29,7 @@ type JoinServerResult =
     | { ok: true; metrics: SnipeMetrics; }
     | { ok: false; reason: "link-unsafe" | "no-uri" | "native-failed"; detail?: string; };
 
-// ─── Join lock ────────────────────────────────────────────────────────────────
+// --- Join lock ---
 
 export function isJoinLocked(trigger: Trigger): boolean {
     return JoinLockStore.isBlocked(trigger.state.priority);
@@ -46,13 +46,13 @@ function activateJoinLock(snipe: Snipe): void {
     );
 
     if (activated) {
-        snipe.logInfo(`Join lock activated — priority ${trigger.state.priority}, duration ${trigger.state.joinlockDuration}s.`);
+        snipe.logInfo(`Join lock activated: priority ${trigger.state.priority}, duration ${trigger.state.joinlockDuration}s.`);
     } else {
-        snipe.logInfo("Join lock not updated — existing lock has higher priority.");
+        snipe.logInfo("Join lock not updated: existing lock has higher priority.");
     }
 }
 
-// ─── Redundancy ───────────────────────────────────────────────────────────────
+// --- Redundancy ---
 
 function isRedundantJoin(snipe: Snipe): boolean {
     if (!snipe.trigger.biome?.skipRedundantJoin) return false;
@@ -65,12 +65,12 @@ function isRedundantJoin(snipe: Snipe): boolean {
         const content = snipe.getRawMessageContent().toLowerCase() ?? "";
         if ([...freshKeywords].some(kw => content.includes(kw.toLowerCase()))) {
             snipe.markAsRedundancyBypassed();
-            snipe.logInfo("Redundant biome bypassed — fresh keyword detected in message.");
+            snipe.logInfo("Redundant biome bypassed: fresh keyword detected in message.");
             return false;
         }
     }
 
-    snipe.logWarn(`Redundant join skipped — already in biome "${expected}".`);
+    snipe.logWarn(`Redundant join skipped: already in biome "${expected}".`);
     return true;
 }
 
@@ -93,7 +93,7 @@ export function shouldJoin(snipe: Snipe): boolean {
     return true;
 }
 
-// ─── Link verification ────────────────────────────────────────────────────────
+// --- Link verification ---
 
 async function verifyLink(link: SnipableLink): Promise<VerifyLinkResult> {
     if (!settings.store.robloxToken) {
@@ -127,7 +127,7 @@ async function verifySnipeSafety(snipe: Snipe): Promise<void> {
         return;
     }
     if (settings.store.linkVerification === "disabled") {
-        snipe.logInfo("Link verification disabled — skipping.");
+        snipe.logInfo("Link verification disabled, skipping.");
         return;
     }
 
@@ -142,20 +142,20 @@ async function verifySnipeSafety(snipe: Snipe): Promise<void> {
 
     if (result.ok) {
         snipe.markAsLinkSafe();
-        snipe.logInfo(`Link verified — Place ID ${result.placeId} is allowed.`);
+        snipe.logInfo(`Link verified: Place ID ${result.placeId} is allowed.`);
     } else if (result.reason === "no-token") {
         snipe.markAsLinkUnsafe();
-        snipe.logError("Link verification failed — no Roblox token configured.");
+        snipe.logError("Link verification failed: no Roblox token configured.");
     } else if (result.reason === "resolve-failed") {
         snipe.markAsLinkNotVerified();
-        snipe.logWarn(`Link verification failed — could not resolve place ID for code "${result.detail}".`);
+        snipe.logWarn(`Link verification failed: could not resolve place ID for code "${result.detail}".`);
     } else {
         snipe.markAsLinkUnsafe();
-        snipe.logWarn(`Link unsafe — Place ID ${result.detail} is not in the allowed list.`);
+        snipe.logWarn(`Link unsafe: Place ID ${result.detail} is not in the allowed list.`);
     }
 }
 
-// ─── Macro kill signal ─────────────────────────────────────────────────────────
+// --- Macro kill signal ---
 
 async function sendMacroKillSignal(snipe: Snipe): Promise<void> {
     if (!settings.store.sendKillProcessSignal) return;
@@ -184,7 +184,7 @@ async function sendMacroKillSignal(snipe: Snipe): Promise<void> {
     }
 }
 
-// ─── Join execution ───────────────────────────────────────────────────────────
+// --- Join execution ---
 
 async function joinServer(uri: string, snipe: Snipe): Promise<JoinServerResult> {
     const tJoinStart = performance.now();
@@ -210,8 +210,7 @@ async function joinServer(uri: string, snipe: Snipe): Promise<JoinServerResult> 
 
     const tJoinEnd = performance.now();
 
-    // Fire-and-forget — dispatched as early as possible after the join fires,
-    // must not block join-lock activation or biome-detection setup that follow.
+    // Not awaited: it must not delay the join lock or biome detection below
     sendMacroKillSignal(snipe).catch(err =>
         logger.error("Kill signal crashed unexpectedly:", err)
     );
@@ -220,9 +219,7 @@ async function joinServer(uri: string, snipe: Snipe): Promise<JoinServerResult> 
         if (!settings.store.ldpAdbPath?.trim()) {
             snipe.logWarn("LDPlayer adb path not configured!");
         } else {
-            // @NOTE(masutty)!IMPORTANT:
-            // if the emulator IS OPEN but NOT RUNNING ROBLOX. this signal will get sent
-            // and do nothing
+            // If the emulator is open but Roblox is not running, this does nothing
 
             const adbResult = await Native.closeRobloxOnEmulator(
                 settings.store.ldpAdbPath,
@@ -257,7 +254,7 @@ export async function join(snipe: Snipe): Promise<void> {
     if (settings.store.linkVerification === "before") {
         await verifySnipeSafety(snipe);
         if (!snipe.isSafe()) {
-            snipe.logWarn("Join aborted — link failed verification (before).");
+            snipe.logWarn("Join aborted: link failed verification (before).");
             return;
         }
     }
@@ -265,7 +262,7 @@ export async function join(snipe: Snipe): Promise<void> {
     const uri = snipe.getJoinUri();
     if (!uri) {
         snipe.markAsFailed();
-        snipe.logError("Join failed — no URI available.");
+        snipe.logError("Join failed: no URI available.");
         return;
     }
 
@@ -274,7 +271,7 @@ export async function join(snipe: Snipe): Promise<void> {
     const result = await joinServer(uri, snipe);
     if (!result.ok) {
         snipe.markAsFailed();
-        snipe.logError(`Join failed — ${result.detail ?? result.reason}`);
+        snipe.logError(`Join failed: ${result.detail ?? result.reason}`);
         return;
     }
 

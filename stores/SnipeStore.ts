@@ -7,13 +7,13 @@
 import { DataStore } from "@api/index";
 import { React } from "@webpack/common";
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
+// --- Constants ---
 
 const STORAGE_KEY = "solsRadar_snipeHistory";
 const LEGACY_LS_KEY = "solsRadar_snipeHistory";
-const MAX_ENTRIES = 100; // 1 entry is about 5kb
+const MAX_ENTRIES = 100; // about 5 KB each
 
-// ─── Tags ─────────────────────────────────────────────────────────────────────
+// --- Tags ---
 
 export type SnipeTag =
     | "biome-verified-real"
@@ -51,7 +51,7 @@ export const TAG_CONFIGS: Record<SnipeTag, SnipeTagConfig> = {
     "unknown": { emoji: "❔", label: "Unknown", detail: "Placeholder tag. This should not appear.", priority: 10 },
 };
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 export interface SnipeMetrics {
     timeToJoinMs: number;
@@ -82,7 +82,7 @@ export interface SnipeEntry {
     authorId?: string;
     channelName?: string;
     guildName?: string;
-    /** Only present on snipes created after this field was added — older entries fall back to guildName for grouping. */
+    /** Missing on older snipes, which group by guildName instead. */
     guildId?: string;
     messageJumpUrl?: string;
     processedMessageText?: string;
@@ -106,33 +106,27 @@ export type NewSnipeData = Omit<SnipeEntry, "id" | "timestamp" | "tags" | "log">
 
 type Listener = (entries: SnipeEntry[]) => void;
 
-// ─── Store ────────────────────────────────────────────────────────────────────
+// --- Store ---
 
 class SnipeHistoryStore {
     private _entries: SnipeEntry[] = [];
     private _listeners = new Set<Listener>();
 
-    /**
-     * Resolves after the initial load from IDB (+ optional LS migration) completes.
-     * Await this before reading or mutating entries in contexts outside React hooks.
-     */
+    /** Resolves once entries are loaded. Await it before using the store outside React hooks. */
     readonly ready: Promise<void>;
 
     constructor() {
         this.ready = this._init();
     }
 
-    // ── Inicialização ────────────────────────────────────────────────────────
+    // --- Init ---
 
     private async _init(): Promise<void> {
         await this._load();
         await this._migrateLegacy();
     }
 
-    /**
-     * One-time migration: if IDB is still empty but localStorage has data from
-     * the old version, import it and remove the localStorage entry.
-     */
+    /** One-time move of old localStorage history into IDB. */
     private async _migrateLegacy(): Promise<void> {
         if (this._entries.length > 0) return;
 
@@ -153,7 +147,7 @@ class SnipeHistoryStore {
         }
     }
 
-    // ── Leitura ──────────────────────────────────────────────────────────────
+    // --- Reading ---
 
     get all(): SnipeEntry[] {
         return [...this._entries];
@@ -178,7 +172,7 @@ class SnipeHistoryStore {
         );
     }
 
-    // ── Mutações ─────────────────────────────────────────────────────────────
+    // --- Mutations ---
 
     add(data: NewSnipeData): number {
         const entry: SnipeEntry = {
@@ -276,7 +270,7 @@ class SnipeHistoryStore {
         }, { replaceTags: false });
     }
 
-    // ── Observers ────────────────────────────────────────────────────────────
+    // --- Observers ---
 
     subscribe(listener: Listener): () => void {
         this._listeners.add(listener);
@@ -290,7 +284,7 @@ class SnipeHistoryStore {
         });
     }
 
-    // ── Persistência ─────────────────────────────────────────────────────────
+    // --- Persistence ---
 
     private _commit(): Promise<void> {
         this._notify();
@@ -318,14 +312,13 @@ class SnipeHistoryStore {
 
 export const SnipeStore = new SnipeHistoryStore();
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// --- Hook ---
 
 export function useSnipeHistory(): SnipeEntry[] {
     const [entries, setEntries] = React.useState<SnipeEntry[]>(SnipeStore.all);
 
     React.useEffect(() => {
-        // Sync once IDB finishes loading (covers the window between
-        // SnipeStore construction and the first subscribe call)
+        // Entries may finish loading after the first render
         SnipeStore.ready.then(() => setEntries(SnipeStore.all));
         return SnipeStore.subscribe(setEntries);
     }, []);

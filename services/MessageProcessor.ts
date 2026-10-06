@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Logger } from "@utils/Logger";
 import { Channel, Guild, Message } from "@vencord/discord-types";
 
+import { Logger } from "../logger";
 import { settings } from "../settings";
 import { getActiveTriggers, KeywordSet } from "../stores/TriggerStore";
 import { SnipableLink, Trigger } from "../types";
@@ -14,11 +14,10 @@ import { extractComponentUrls, parseCsv } from "../utils";
 
 const logger = new Logger("SolRadar.MessageProcessor");
 
-// ─── Link extraction ──────────────────────────────────────────────────────────
+// --- Link extraction ---
 
-// Covers all Roblox link formats the plugin recognises.
-// Used both for extraction and for sanitisation before keyword matching,
-// preventing slugs like "Cyberspace" or "Blood-Rain" from firing triggers.
+// Every Roblox link format the plugin knows. Also used to strip links before keyword
+// matching, so URL slugs like "Cyberspace" or "Blood-Rain" don't fire triggers.
 const ROBLOX_LINK_PATTERN = /https?:\/\/(?:www\.)?roblox\.com\/(?:share\?code=[a-f0-9]+(?:&[^\s]*)?|games\/\d+(?:\/[^\s?]*)?(?:\?[^\s]*)?)/gi;
 const SHARE_LINK_RE = /https?:\/\/(?:www\.)?roblox\.com\/share\?code=([a-f0-9]+)/i;
 const PRIVATE_SERVER_RE = /https?:\/\/(?:www\.)?roblox\.com\/games\/(\d+)(?:\/[^?]*)?\?privateserverlinkcode=([a-f0-9]+)/i;
@@ -37,7 +36,7 @@ export function getSnipableLink(content: string): SnipableLink | null {
     if (matches === 0) return null;
 
     if (matches > 1 && !settings.store.resolveAmbiguousLinks) {
-        logger.warn("Ambiguous message — multiple link types detected, skipping.");
+        logger.warn("Ambiguous message: multiple link types detected, skipping.");
         return null;
     }
 
@@ -62,7 +61,7 @@ export function stripSnipableLinks(content: string): string {
     return content.replace(ROBLOX_LINK_PATTERN, "").replace(/\s{2,}/g, " ").trim();
 }
 
-// ─── Message pipeline ─────────────────────────────────────────────────────────
+// --- Message pipeline ---
 
 export function flattenEmbeds(message: Message): void {
     if (!settings.store.flattenEmbeds || !message.embeds.length) return;
@@ -70,7 +69,7 @@ export function flattenEmbeds(message: Message): void {
     for (const embed of message.embeds) {
         if (embed.type !== "rich") continue;
 
-        // @ts-ignore - flux event uses title/description, message store uses rawTitle/rawDescription
+        // @ts-ignore flux events use title/description, the message store uses rawTitle/rawDescription
         const title = embed.rawTitle ?? embed.title;
         // @ts-ignore
         const description = embed.rawDescription ?? embed.description;
@@ -105,10 +104,10 @@ export function sanitizeContent(message: Message): void {
     message.content = stripSnipableLinks(message.content);
 }
 
-// ─── Message filters ──────────────────────────────────────────────────────────
+// --- Message filters ---
 
 export function isValidMessage(message: Message): boolean {
-    // @ts-ignore - ts is drunk, I think the type is not updated
+    // @ts-ignore webhook_id is missing from the Message type
     const webhook_id = message.webhook_id ?? message.author.id ?? undefined;
     const isASelfForward = getActiveTriggers().some(t => {
         const url = t.forwarding.webhookUrl || settings.store.globalWebhookUrl;
@@ -138,42 +137,34 @@ export function isMessageAllowed(
     if (!trigger.conditions.bypassIgnoredGuilds) {
         const ignoredGuilds = parseCsv(settings.store.ignoredGuilds);
         if (ignoredGuilds.has(channel.guild_id)) {
-            logger.debug(`[${trigger.name}] Guild ${channel.guild_id} is ignored — skipping.`);
+            logger.debug(`[${trigger.name}] Guild ${channel.guild_id} is ignored, skipping.`);
             return false;
         }
     }
 
     if (trigger.conditions.ignoredGuilds.includes(channel.guild_id)) {
-        logger.debug(`[${trigger.name}] Guild ${channel.guild_id} is ignored by trigger — skipping.`);
+        logger.debug(`[${trigger.name}] Guild ${channel.guild_id} is ignored by trigger, skipping.`);
         return false;
     }
 
     if (!trigger.conditions.bypassIgnoredChannels) {
         const ignoredChannels = parseCsv(settings.store.ignoredChannels);
         if (ignoredChannels.has(channel.id)) {
-            logger.debug(`[${trigger.name}] Channel #${channel.name} is ignored — skipping.`);
+            logger.debug(`[${trigger.name}] Channel #${channel.name} is ignored, skipping.`);
             return false;
         }
     }
 
     if (trigger.conditions.ignoredChannels.includes(channel.id)) {
-        logger.debug(`[${trigger.name}] Channel #${channel.name} is ignored by trigger — skipping.`);
+        logger.debug(`[${trigger.name}] Channel #${channel.name} is ignored by trigger, skipping.`);
         return false;
     }
 
     const ignoredUsers = parseCsv(settings.store.ignoredUsers);
     if (ignoredUsers.has(message.author.id)) {
-        logger.debug(`[${trigger.name}] User ${message.author.id} is ignored — skipping.`);
+        logger.debug(`[${trigger.name}] User ${message.author.id} is ignored, skipping.`);
         return false;
     }
-
-    // if (!trigger.conditions.bypassMonitoredOnly) {
-    //     const monitored = parseCsv(settings.store.monitoredChannels);
-    //     if (monitored.size > 0 && !monitored.has(channel.id)) {
-    //         logger.debug(`[${trigger.name}] Channel #${channel.name} is not monitored — skipping.`);
-    //         return false;
-    //     }
-    // }
 
     if (!trigger.conditions.bypassMonitoredOnly) {
         const monitoredChannels = parseCsv(settings.store.monitoredChannels);
@@ -184,7 +175,7 @@ export function isMessageAllowed(
         const guildAllowed = monitoredGuilds.has(channel.guild_id);
 
         if (hasMonitors && !channelAllowed && !guildAllowed) {
-            logger.debug(`[${trigger.name}] Channel #${channel.name} / Guild ${channel.guild_id} not monitored — skipping.`);
+            logger.debug(`[${trigger.name}] Channel #${channel.name} / Guild ${channel.guild_id} not monitored, skipping.`);
             return false;
         }
     }
@@ -192,7 +183,7 @@ export function isMessageAllowed(
     return true;
 }
 
-// ─── Trigger matching ─────────────────────────────────────────────────────────
+// --- Trigger matching ---
 
 function containsKeyword(text: string, keyword: string, strict: boolean): boolean {
     if (strict) {
@@ -214,7 +205,7 @@ function evaluateTrigger(message: Message, trigger: Trigger): { matched: boolean
     const authorId = message.author.id;
     const channelId = message.channel_id;
 
-    // NOTE 15/05/26: DO NOT TRUST message.mentionRoles THIS SHIT IS undefined
+    // message.mentionRoles is unreliable (often undefined), so parse role mentions from the content
     const mentionRoles = [...content.matchAll(/<@&(\d+)>/g)].map(m => m[1]);
 
     if (conditions.fromUser.length > 0 && !conditions.fromUser.includes(authorId))
@@ -250,7 +241,7 @@ function getMatchingTrigger(message: Message, activeTriggers: Trigger[]): Trigge
 
     if (normals.length > 1) {
         logger.warn(
-            `Ambiguous — ${normals.length} normal triggers matched: ` +
+            `Ambiguous: ${normals.length} normal triggers matched: ` +
             normals.map(t => `"${t.name}"`).join(", ") +
             ". Discarding all normal triggers."
         );
@@ -272,7 +263,7 @@ function getMatchingTrigger(message: Message, activeTriggers: Trigger[]): Trigge
     return winner;
 }
 
-// ─── Trigger resolution ───────────────────────────────────────────────────────
+// --- Trigger resolution ---
 
 export function resolveTrigger(
     { message, channel, guild }: { message: Message; channel: Channel; guild: Guild; },

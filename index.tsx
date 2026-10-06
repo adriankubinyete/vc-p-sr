@@ -5,7 +5,6 @@
  */
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { Channel, Guild, Message } from "@vencord/discord-types";
 import { ChannelType } from "@vencord/discord-types/enums";
@@ -16,6 +15,7 @@ import { SolsRadarIcon } from "./components/icons/SolsRadarIcon";
 import { SolsRadarChatBarButton } from "./components/ui/buttons/SolsRadarChatBarButton";
 import { SolsRadarTitleBarButton } from "./components/ui/buttons/SolsRadarTitleBarButton";
 import { openMessageDebugModal } from "./components/ui/MessageDebugModal";
+import { Logger } from "./logger";
 import { Snipe } from "./models/Snipe";
 import { BiomeDetector } from "./services/BiomeDetector";
 import { cancelBiomeDetection } from "./services/BiomeWatcher";
@@ -37,7 +37,7 @@ export interface JoinResult {
     linkSafe: boolean | undefined;
 }
 
-// ─── orchestration ─────────────────────────────────────────────────────────────
+// --- Orchestration ---
 
 async function handleMessage(message: Message, channel: Channel, guild: Guild, tMessageReceived: number): Promise<void> {
     if (!isValidMessage(message)) return;
@@ -53,7 +53,7 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
     const trigger = resolveTrigger({ message, channel, guild });
     if (!trigger) return;
 
-    logger.info(`Match: "${trigger.name}" (p${trigger.state.priority}) — #${channel.name} @ ${guild.name}`);
+    logger.info(`Match: "${trigger.name}" (p${trigger.state.priority}) in #${channel.name} @ ${guild.name}`);
 
     if (!isMessageAllowed({ channel, message, trigger })) return;
     if (isJoinLocked(trigger)) return;
@@ -79,7 +79,7 @@ async function handleMessage(message: Message, channel: Channel, guild: Guild, t
     markAsSeen(snipe);
 }
 
-// ─── plugin ───────────────────────────────────────────────────────────────────
+// --- Plugin ---
 
 export default definePlugin({
     name: "SolRadar",

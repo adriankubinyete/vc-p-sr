@@ -1,0 +1,228 @@
+/* --- Buttons next to the search bar and in the modal --- */
+
+.vc-sora-history-iconbtn {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 6px;
+    padding: 0;
+    background: var(--background-mod-strong);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+.vc-sora-history-iconbtn:hover {
+    background: var(--background-mod-normal);
+    color: var(--text-default);
+}
+
+.vc-sora-history-sbtn {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 38px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--background-mod-subtle);
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+.vc-sora-history-sbtn:hover {
+    background: var(--background-mod-normal);
+    color: var(--text-default);
+}
+
+.vc-sora-history-sbtn.active {
+    color: var(--sora-c);
+    background: color-mix(in srgb, var(--sora-c) 14%, transparent);
+}
+
+/* Shift delete only shows on the hovered card */
+.vc-sora-history-card:not(:hover) .vc-sora-deletebtn-wrapper {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* --- Timeline --- */
+
+.vc-sora-history-day {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 2px 4px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.vc-sora-history-day:first-child {
+    margin-top: 2px;
+}
+
+.vc-sora-history-day::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--background-mod-subtle);
+}
+
+.vc-sora-history-row {
+    display: grid;
+    grid-template-columns: 44px 14px minmax(0, 1fr);
+    column-gap: 8px;
+    animation: vc-sora-card-in 0.28s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.vc-sora-history-time {
+    padding-top: 15px;
+    color: var(--text-muted);
+    font-family: var(--font-code);
+    font-size: 12px;
+    text-align: right;
+}
+
+.vc-sora-history-rail {
+    position: relative;
+}
+
+.vc-sora-history-rail::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: -6px;
+    left: 6px;
+    width: 2px;
+    background: var(--background-mod-subtle);
+}
+
+.vc-sora-history-rail::after {
+    content: "";
+    position: absolute;
+    top: 18px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--sora-s);
+    box-shadow: 0 0 0 3px var(--modal-background, var(--background-base-low));
+}
+
+/* --- Card --- */
+
+.vc-sora-history-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--sora-s) 10%, var(--background-mod-subtle));
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+
+.vc-sora-history-card:hover {
+    background: color-mix(in srgb, var(--sora-s) 16%, var(--background-mod-normal));
+    transform: translateX(2px);
+    box-shadow: 0 3px 10px rgb(0 0 0 / 15%);
+}
+
+/* Nothing really happened: faded and grey, back to (almost) full on hover */
+.vc-sora-history-row.quiet .vc-sora-history-card {
+    background: var(--background-mod-subtle);
+    opacity: 0.55;
+}
+
+.vc-sora-history-row.quiet .vc-sora-history-card:hover {
+    opacity: 0.9;
+}
+
+.vc-sora-history-row.quiet .vc-sora-history-icon {
+    filter: grayscale(0.7);
+}
+
+.vc-sora-history-row.quiet .vc-sora-history-rail::after {
+    background: var(--background-mod-strong);
+}
+
+.vc-sora-history-icon {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.vc-sora-history-title {
+    overflow: hidden;
+    color: var(--control-secondary-text-default);
+    font-size: 14.5px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Author, channel and server share one line; author and channel are capped so the server always shows */
+.vc-sora-history-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    white-space: nowrap;
+}
+
+.vc-sora-history-field {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vc-sora-history-field.author {
+    flex: 0 1 auto;
+    max-width: 32%;
+}
+
+.vc-sora-history-field.channel {
+    flex: 0 1 auto;
+    max-width: 34%;
+}
+
+.vc-sora-history-field.server {
+    flex: 1 1 auto;
+}
+
+.vc-sora-history-sep {
+    flex-shrink: 0;
+    opacity: 0.6;
+}
+
+@keyframes vc-sora-card-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vc-sora-history-row {
+        animation: none;
+    }
+
+    .vc-sora-history-card,
+    .vc-sora-history-card:hover {
+        transition: none;
+        transform: none;
+    }
+}

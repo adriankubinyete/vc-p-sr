@@ -5,11 +5,11 @@
  */
 
 import "../../ui/OrderSlot.css";
+import "./triggers.css";
 
 import { Button } from "@components/Button";
 import { Paragraph } from "@components/Paragraph";
-import { Logger } from "@utils/Logger";
-import { Alerts, React, ReactDOM, showToast, TextInput, Toasts, useEffect, useRef, useState } from "@webpack/common";
+import { Alerts, ContextMenuApi, Menu, React, ReactDOM, ScrollerThin, showToast, TextInput, Tooltip, useEffect, useRef, useState } from "@webpack/common";
 
 import { settings } from "../../../settings";
 import {
@@ -22,6 +22,7 @@ import {
     toggleTrigger,
     Trigger,
     TriggerType,
+    updateTrigger,
     useTriggers,
 } from "../../../stores/TriggerStore";
 import { UIState } from "../../../stores/UIStateStore";
@@ -29,37 +30,16 @@ import defaultTriggers from "../../../triggers.json";
 import { isDeveloper } from "../../../utils";
 import { JoinLockBanner } from "../../JoinLockBanner";
 import { DeleteButton } from "../../ui/buttons/DeleteButton";
-import { QuickFilterBtn } from "../../ui/buttons/QuickFilterBtn";
 import { DragHandle } from "../../ui/DragHandle";
-import { Pill, PillBorder, PillRadius, PillVariant } from "../../ui/Pill";
+import { COLORS } from "../../ui/styles";
+import { useShiftHeld } from "../../ui/useShiftHeld";
+import { TriggerIcon, TYPE_META } from "./editor/sections";
 import { confirmWebhookThenRun } from "./exportActions";
 import { PublicExportOptions } from "./PublicExportOptions";
 import { openTriggerContextMenu } from "./TriggerContextMenu";
 import { openAddTriggerModal, openEditTriggerModal } from "./TriggerModal";
 
-const logger = new Logger("SolRadar");
-
-// ─── Helpers visuais ──────────────────────────────────────────────────────────
-
-const TYPE_LABELS: Record<TriggerType, string> = {
-    RARE_BIOME: "Rare Biome",
-    EVENT_BIOME: "Event Biome",
-    BIOME: "Biome",
-    WEATHER: "Weather",
-    MERCHANT: "Merchant",
-    CUSTOM: "Custom",
-};
-
-const TYPE_PILL_VARIANT: Record<TriggerType, PillVariant> = {
-    RARE_BIOME: "red",
-    EVENT_BIOME: "green",
-    BIOME: "pink",
-    WEATHER: "blue",
-    MERCHANT: "yellow",
-    CUSTOM: "muted",
-};
-
-// ─── Query parser ─────────────────────────────────────────────────────────────
+// --- Query parser ---
 
 interface ParsedQuery {
     text: string;
@@ -146,94 +126,207 @@ function applyQuery(triggers: Trigger[], q: ParsedQuery, typeFilter: TriggerType
     });
 }
 
-// ─── Estilos ──────────────────────────────────────────────────────────────────
+// --- Icons ---
+
+function FilterIcon() {
+    return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 6h16M7 12h10M10 18h4" />
+        </svg>
+    );
+}
+
+function MoreIcon() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="19" cy="12" r="2" />
+        </svg>
+    );
+}
+
+// --- Menus ---
+
+type TypeFilter = TriggerType | "all";
+
+function openTypeFilterMenu(e: React.MouseEvent, triggers: Trigger[], current: TypeFilter, onChange: (f: TypeFilter) => void) {
+    const options: TypeFilter[] = ["all", ...(Object.keys(TYPE_META) as TriggerType[])];
+    ContextMenuApi.openContextMenu(e, () => (
+        <Menu.Menu navId="vc-sora-triggers-filter" onClose={ContextMenuApi.closeContextMenu} aria-label="Filter triggers">
+            {options.map(type => {
+                const count = type === "all" ? triggers.length : triggers.filter(t => t.type === type).length;
+                return (
+                    <Menu.MenuRadioItem
+                        key={type}
+                        id={`vc-sora-triggers-filter-${type}`}
+                        group="vc-sora-triggers-filter"
+                        label={`${type === "all" ? "All types" : TYPE_META[type].label} (${count})`}
+                        checked={current === type}
+                        action={() => onChange(type)}
+                    />
+                );
+            })}
+        </Menu.Menu>
+    ));
+}
+
+// --- Card ---
+
+const MAX_STAGGER_MS = 300;
+
+function QuickToggle({ on, emoji, color, tooltip, onClick }: {
+    on: boolean; emoji: string; color: string; tooltip: string; onClick: () => void;
+}) {
+    return (
+        <Tooltip text={tooltip}>
+            {props => (
+                <button
+                    {...props}
+                    type="button"
+                    aria-pressed={on}
+                    className={`vc-sora-trigger-qt${on ? " on" : ""}`}
+                    style={{ "--sora-c": color } as React.CSSProperties}
+                    onClick={e => { e.stopPropagation(); onClick(); }}
+                    onContextMenu={e => e.stopPropagation()}
+                >
+                    <span className="emoji">{emoji}</span>
+                </button>
+            )}
+        </Tooltip>
+    );
+}
+
+function TriggerCard({
+    trigger,
+    index,
+    position,
+    isFirst,
+    isLast,
+    orderingDisabled,
+    useButtonsForOrdering,
+    useContextMenu,
+    shiftHeld,
+    isDragging,
+    onMoveUp,
+    onMoveDown,
+    onDragHandleDown,
+}: {
+    trigger: Trigger;
+    index: number;
+    /** Place in the visible list, for the entry stagger */
+    position: number;
+    isFirst: boolean;
+    isLast: boolean;
+    orderingDisabled: boolean;
+    useButtonsForOrdering: boolean;
+    useContextMenu: boolean;
+    shiftHeld: boolean;
+    isDragging: boolean;
+    onMoveUp: () => void;
+    onMoveDown: () => void;
+    onDragHandleDown: (e: React.PointerEvent, cardRect: DOMRect) => void;
+}) {
+    const [hovered, setHovered] = useState(false);
+    const cardRef = useRef<HTMLDivElement>(null);
+    const meta = TYPE_META[trigger.type];
+    const { enabled, autojoin, notify, joinlock, priority } = trigger.state;
+    const forwards = trigger.forwarding.onMatch.enabled || trigger.forwarding.onDetection.enabled;
+    const keywords = trigger.conditions.keywords.match.value;
+    const subline = trigger.description || (keywords.length ? keywords.join(", ") : "No keywords yet");
+
+    const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+    const setState = (p: Partial<Trigger["state"]>) => updateTrigger(trigger.id, { state: { ...trigger.state, ...p } });
+
+    return (
+        <div
+            ref={cardRef}
+            data-trigger-index={index}
+            className={`vc-sora-trigger-card${enabled ? "" : " off"}${isDragging ? " dragging" : ""}`}
+            style={{ animationDelay: `${Math.min(position * 30, MAX_STAGGER_MS)}ms` }}
+            onClick={() => openEditTriggerModal(trigger)}
+            onContextMenu={e => {
+                e.preventDefault();
+                if (useContextMenu) openTriggerContextMenu(e, trigger);
+                else toggleTrigger(trigger.id);
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+        >
+            {!orderingDisabled && (useButtonsForOrdering ? (
+                <div className={`vc-sora-orderslot${hovered ? " visible" : ""}`} style={s.orderButtons} onClick={stop} onContextMenu={stop}>
+                    <button style={s.orderBtn(isFirst)} disabled={isFirst} onClick={onMoveUp} title="Move this card up">▲</button>
+                    <button style={s.orderBtn(isLast)} disabled={isLast} onClick={onMoveDown} title="Move this card down">▼</button>
+                </div>
+            ) : (
+                <DragHandle
+                    visible={hovered}
+                    onPointerDownHandle={e => {
+                        if (cardRef.current) onDragHandleDown(e, cardRef.current.getBoundingClientRect());
+                    }}
+                    onMoveUp={onMoveUp}
+                    onMoveDown={onMoveDown}
+                />
+            ))}
+
+            <TriggerIcon draft={trigger} size={40} />
+
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <span className="vc-sora-trigger-name">{trigger.name}</span>
+                    <span className="vc-sora-trigger-type" style={{ "--sora-c": meta.color } as React.CSSProperties}>{meta.label}</span>
+                </div>
+                <span className="vc-sora-trigger-sub" title={subline}>{subline}</span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <QuickToggle
+                    on={autojoin}
+                    emoji="🎯"
+                    color="var(--green-360)"
+                    tooltip={`Auto-join: ${autojoin ? "on" : "off"}. Joins the server as soon as it matches.`}
+                    onClick={() => setState({ autojoin: !autojoin })}
+                />
+                <QuickToggle
+                    on={notify}
+                    emoji="🔔"
+                    color="var(--blue-345)"
+                    tooltip={`Notify: ${notify ? "on" : "off"}. Shows a desktop notification on a match.`}
+                    onClick={() => setState({ notify: !notify })}
+                />
+                <QuickToggle
+                    on={forwards}
+                    emoji="➡️"
+                    color="var(--blue-345)"
+                    tooltip={`Forward: ${forwards ? "on" : "off"}. Sends the match to a webhook.`}
+                    onClick={() => updateTrigger(trigger.id, {
+                        forwarding: forwards
+                            ? { ...trigger.forwarding, onMatch: { ...trigger.forwarding.onMatch, enabled: false }, onDetection: { enabled: false } }
+                            : { ...trigger.forwarding, onMatch: { ...trigger.forwarding.onMatch, enabled: true } },
+                    })}
+                />
+                <Tooltip text={joinlock ? `Priority ${priority}, with join lock. Lower is more important.` : `Priority ${priority}. Lower is more important.`}>
+                    {props => <span {...props} className="vc-sora-trigger-prio">{joinlock ? "🔒" : "★"} {priority}</span>}
+                </Tooltip>
+            </div>
+            {shiftHeld && <DeleteButton visible={hovered} hint="Delete this trigger" onClick={() => deleteTrigger(trigger.id)} />}
+        </div>
+    );
+}
+
+// Drag preview: just icon and name, like Discord's own reorder previews.
+function DragGhost({ trigger }: { trigger: Trigger; }) {
+    return (
+        <div style={s.dragGhost}>
+            <TriggerIcon draft={trigger} size={40} />
+            <span className="vc-sora-trigger-name">{trigger.name}</span>
+        </div>
+    );
+}
+
+// --- Styles ---
 
 const s = {
-    wrapper: {
-        display: "flex",
-        flexDirection: "column" as const,
-        height: "100%",
-        minHeight: 0,
-        gap: 8,
-    },
-    filters: {
-        flexShrink: 0,
-        display: "flex",
-        flexDirection: "column" as const,
-        gap: 6,
-    },
-    quickFilters: {
-        display: "flex",
-        gap: 4,
-        flexWrap: "wrap" as const,
-    },
-    container: {
-        flex: 1,
-        overflowY: "auto" as const,
-        minHeight: 0,
-        scrollbarColor: "var(--text-muted) transparent",
-        scrollbarWidth: "thin" as const,
-    },
-    list: {
-        display: "flex",
-        flexDirection: "column" as const,
-        gap: 6,
-    },
-    empty: {
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "var(--text-muted)",
-        textAlign: "center" as const,
-        minHeight: 200,
-    },
-    toolbar: {
-        flexShrink: 0,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 12,
-        gap: 8,
-    },
-    toolbarRight: { display: "flex", gap: 6 },
-
-    // Card
-    card: (enabled: boolean): React.CSSProperties => ({
-        borderRadius: 8,
-        cursor: "pointer",
-        userSelect: "none",
-        overflow: "hidden",
-        transition: "filter 0.1s",
-        // new
-        // background: enabled
-        //     ? "color-mix(in srgb, var(--green-360) 6%, var(--background-secondary))"
-        //     : "var(--background-secondary)",
-        // border: `1px solid ${enabled
-        //     ? "color-mix(in srgb, var(--green-360) 25%, transparent)"
-        //     : "var(--background-mod-normal)"}`,
-        // old
-        background: enabled
-            ? "rgba(59, 165, 92, 0.1)"
-            : "rgba(67, 67, 67, 0.1)",
-        border: `1px solid ${enabled
-            ? "rgba(59, 165, 92, 0.3)"
-            : "rgba(255, 255, 255, 0.1)"}`,
-    }),
-    cardMain: {
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "10px 14px",
-    },
-    dragGhost: {
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "10px 14px",
-        borderRadius: 8,
-        background: "var(--background-secondary)",
-        border: "1px solid var(--background-modifier-accent)",
-    } as React.CSSProperties,
     orderButtons: {
         display: "flex",
         flexDirection: "column" as const,
@@ -252,322 +345,28 @@ const s = {
         borderRadius: 3,
         transition: "color 0.1s, opacity 0.1s",
     }),
-    cardIcon: {
-        width: 36, height: 36, borderRadius: 8,
-        flexShrink: 0, objectFit: "cover" as const,
-    },
-    cardIconPlaceholder: {
-        width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-        fontSize: 15, fontWeight: 700,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "background 0.2s, color 0.2s",
-    } as React.CSSProperties,
-    cardBody: {
-        flex: 1, display: "flex",
-        flexDirection: "column" as const,
-        gap: 3, minWidth: 0,
-    },
-    cardName: (enabled: boolean): React.CSSProperties => ({
-        fontWeight: 600, fontSize: 14,
-        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
-        color: enabled ? "var(--control-secondary-text-default)" : "var(--text-muted)",
-        transition: "color 0.2s",
-    }),
-    cardMeta: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const },
-    cardDescription: {
-        fontSize: 12,
-        color: "var(--text-muted)",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap" as const,
-        marginTop: 2,
-    },
-    cardFooter: {
-        borderTop: "1px solid var(--background-mod-normal)",
-        padding: "5px 14px",
+    dragGhost: {
         display: "flex",
-        gap: 6,
-        flexWrap: "wrap" as const,
         alignItems: "center",
-    },
-    deleteBtn: (): React.CSSProperties => ({
-        background: "none",
-        border: "none",
-        padding: "4px 8px",
-        borderRadius: 4,
-        cursor: "pointer",
-        color: "var(--control-critical-primary-text-default)",
-        fontSize: 13,
-        fontWeight: 600,
-        opacity: 0.7,
-        transition: "opacity 0.1s",
-    }),
+        gap: 12,
+        padding: "10px 14px",
+        borderRadius: 8,
+        background: "var(--background-secondary)",
+        border: "1px solid var(--background-modifier-accent)",
+    } as React.CSSProperties,
 };
 
-// ─── Card ─────────────────────────────────────────────────────────────────────
-
-function TriggerCard({
-    trigger,
-    index,
-    isFirst,
-    isLast,
-    shiftHeld,
-    orderingDisabled,
-    useButtonsForOrdering,
-    useContextMenu,
-    isDragging,
-    onMoveUp,
-    onMoveDown,
-    onDragHandleDown,
-}: {
-    trigger: Trigger;
-    index: number;
-    isFirst: boolean;
-    isLast: boolean;
-    shiftHeld: boolean;
-    orderingDisabled: boolean;
-    useButtonsForOrdering: boolean;
-    useContextMenu: boolean;
-    isDragging: boolean;
-    onMoveUp: () => void;
-    onMoveDown: () => void;
-    onDragHandleDown: (e: React.PointerEvent, cardRect: DOMRect) => void;
-}) {
-    const variant = TYPE_PILL_VARIANT[trigger.type];
-    const label = TYPE_LABELS[trigger.type];
-    const initial = trigger.name.charAt(0).toUpperCase();
-    const [hovered, setHovered] = useState(false);
-    const cardRef = useRef<HTMLDivElement>(null);
-    const { enabled, autojoin, notify, joinlock, joinlockDuration, priority } = trigger.state;
-    const { forwarding } = trigger;
-    const { bypassMonitoredOnly, bypassIgnoredChannels, bypassIgnoredGuilds, bypassMatchAmbiguity, bypassLinkVerification } = trigger.conditions;
-    const hasAnyBypass = bypassMonitoredOnly || bypassIgnoredChannels || bypassIgnoredGuilds || bypassMatchAmbiguity || bypassLinkVerification;
-
-    const PILL_BORDER_STYLE: PillBorder = "subtle";
-    const PILL_RADIUS_STYLE: PillRadius = "xs";
-
-    const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
-
-    const canReorder = !orderingDisabled;
-
-    return (
-        <div
-            ref={cardRef}
-            data-trigger-index={index}
-            style={{
-                ...s.card(enabled),
-                filter: hovered && !isDragging ? "brightness(1.1)" : "none",
-                ...(isDragging && {
-                    border: "2px dashed var(--text-muted)",
-                    background: "var(--background-modifier-selected, var(--background-secondary-alt))",
-                }),
-            }}
-            onClick={() => openEditTriggerModal(trigger)}
-            onContextMenu={e => {
-                e.preventDefault();
-                if (useContextMenu) openTriggerContextMenu(e, trigger);
-                else toggleTrigger(trigger.id);
-            }}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            title={useContextMenu
-                ? `${trigger.name} · Left click to edit · Right click for more options`
-                : `${trigger.name} · Left click to edit · Right click to toggle trigger`}
-        >
-            {/* Main row */}
-            <div style={{ ...s.cardMain, visibility: isDragging ? "hidden" : "visible" }}>
-                {/* Ordem */}
-                {canReorder && (useButtonsForOrdering ? (
-                    <div
-                        className={`vc-sora-orderslot${hovered ? " visible" : ""}`}
-                        style={s.orderButtons}
-                        onClick={stopPropagation}
-                        onContextMenu={stopPropagation}
-                    >
-                        <button style={s.orderBtn(isFirst)} disabled={isFirst} onClick={onMoveUp} title="Move this card up">▲</button>
-                        <button style={s.orderBtn(isLast)} disabled={isLast} onClick={onMoveDown} title="Move this card down">▼</button>
-                    </div>
-                ) : (
-                    <DragHandle
-                        visible={hovered}
-                        onPointerDownHandle={e => {
-                            if (cardRef.current) onDragHandleDown(e, cardRef.current.getBoundingClientRect());
-                        }}
-                        onMoveUp={onMoveUp}
-                        onMoveDown={onMoveDown}
-                    />
-                ))}
-
-                {/* Ícone */}
-                {trigger.iconUrl
-                    ? <img src={trigger.iconUrl} alt="" style={s.cardIcon} />
-                    : <div
-                        className={`vc-sora-pill-base vc-sora-pill-${enabled ? variant : "muted"}`}
-                        style={{ ...s.cardIconPlaceholder, borderRadius: 8, whiteSpace: "unset" }}
-                    >
-                        {initial}
-                    </div>
-                }
-
-                {/* Info */}
-                <div style={s.cardBody}>
-                    <span style={s.cardName(enabled)}>{trigger.name}</span>
-                    {/* <div style={s.cardMeta}>
-                        <Pill radius="none" variant={enabled ? variant : "muted"} size="xs">{label}</Pill>
-                    </div> */}
-                    {trigger.description && (
-                        <div style={s.cardDescription} title={trigger.description}>
-                            {trigger.description}
-                        </div>
-                    )}
-                </div>
-
-                {/* Delete (só com shift) */}
-                {shiftHeld && <DeleteButton
-                    onClick={() => deleteTrigger(trigger.id)}
-                    visible={hovered}
-                    hint="Delete this trigger"
-                />}
-
-                <span style={{
-                    color: "var(--text-muted)",
-                    fontSize: 18,
-                    flexShrink: 0,
-                    alignSelf: "center"
-                }}>
-                    ›
-                </span>
-            </div>
-
-            {/* Footer — priority + estado */}
-            <div style={{ ...s.cardFooter, visibility: isDragging ? "hidden" : "visible" }}>
-                <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? variant : "muted"} size="xs" title="Type of trigger">{label}</Pill>
-                <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "brand" : "muted"} size="xs" title={`This trigger has a join priority of ${priority} (lower = more important)`}>
-                    ★ {priority}
-                </Pill>
-                {autojoin && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "green" : "muted"} size="xs" emoji="🎯" iconOnly title="This trigger will join the link once matched" />}
-                {notify && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "blue" : "muted"} size="xs" emoji="🔔" iconOnly title="This trigger will notify you once matched" />}
-                {joinlock && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "yellow" : "muted"} size="xs" emoji="🔒" iconOnly title={`This trigger will lock joins for ${joinlockDuration} seconds once matched`} />}
-                {hasAnyBypass && (() => {
-                    const bypasses: string[] = [];
-                    if (bypassMonitoredOnly) bypasses.push("Monitor-only bypass");
-                    if (bypassIgnoredGuilds) bypasses.push("Server bypass");
-                    if (bypassIgnoredChannels) bypasses.push("Channel bypass");
-                    if (bypassMatchAmbiguity) bypasses.push("Match ambiguity bypass");
-                    if (bypassLinkVerification) bypasses.push("Link verification bypass");
-                    return (
-                        <Pill
-                            border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "red" : "muted"}
-                            size="xs"
-                            emoji="✂️"
-                            iconOnly
-                            title={"This trigger has the following bypasses:\n" + bypasses.join(" · ")}
-                        />
-                    );
-                })()}
-                {(forwarding.onMatch.enabled || forwarding.onDetection.enabled) && <Pill border={enabled ? PILL_BORDER_STYLE : "none"} radius={PILL_RADIUS_STYLE} variant={enabled ? "blue" : "muted"} size="xs" emoji="➡️" iconOnly title={"This trigger will forward the messages to a webhook"} />}
-            </div>
-        </div>
-    );
-}
-
-// Lightweight floating preview that follows the cursor while dragging — deliberately
-// simpler than the full card (icon + name only), matching how Discord's own reorder
-// previews look for channels/servers.
-function DragGhost({ trigger }: { trigger: Trigger; }) {
-    const variant = TYPE_PILL_VARIANT[trigger.type];
-    const initial = trigger.name.charAt(0).toUpperCase();
-    const { enabled } = trigger.state;
-
-    return (
-        <div style={s.dragGhost}>
-            {trigger.iconUrl
-                ? <img src={trigger.iconUrl} alt="" style={s.cardIcon} />
-                : <div
-                    className={`vc-sora-pill-base vc-sora-pill-${enabled ? variant : "muted"}`}
-                    style={{ ...s.cardIconPlaceholder, borderRadius: 8, whiteSpace: "unset" }}
-                >
-                    {initial}
-                </div>
-            }
-            <span style={s.cardName(enabled)}>{trigger.name}</span>
-        </div>
-    );
-}
-
-// ─── Tab ──────────────────────────────────────────────────────────────────────
-
-const QUICK_FILTERS: { type: TriggerType | "all"; label: string; variant: PillVariant; }[] = [
-    { type: "all", label: "All", variant: "brand" },
-    { type: "RARE_BIOME", label: "Rare Biome", variant: "red" },
-    { type: "EVENT_BIOME", label: "Event", variant: "green" },
-    { type: "BIOME", label: "Biome", variant: "pink" },
-    { type: "WEATHER", label: "Weather", variant: "blue" },
-    { type: "MERCHANT", label: "Merchant", variant: "yellow" },
-    { type: "CUSTOM", label: "Custom", variant: "muted" },
-];
-
-
-export function CollapsibleTip({ children, title = "Tips", emoji }: {
-    children: React.ReactNode;
-    title?: string;
-    emoji?: string;
-}) {
-    const [open, setOpen] = useState(false);
-
-    return (
-        <div style={{ marginBottom: 6 }}>
-            <button
-                onClick={() => setOpen(v => !v)}
-                style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: "2px 0",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    color: "var(--text-muted)",
-                    fontSize: 12,
-                    userSelect: "none",
-                }}
-            >
-                <span style={{
-                    display: "inline-block",
-                    transition: "transform 150ms ease",
-                    transform: open ? "rotate(90deg)" : "rotate(0deg)",
-                    fontSize: 10,
-                }}>▶</span>
-                {emoji && <span style={{ fontSize: 13 }}>{emoji}</span>}
-                {title}
-            </button>
-
-            {open && (
-                <div style={{
-                    marginTop: 6,
-                    padding: "8px 12px",
-                    borderRadius: 6,
-                    background: "var(--background-mod-subtle)",
-                    fontSize: 12,
-                    color: "var(--text-muted)",
-                    lineHeight: 1.6,
-                }}>
-                    {children}
-                </div>
-            )}
-        </div>
-    );
-}
+// --- Tab ---
 
 export function TriggersTab() {
     const triggers = useTriggers();
     const importRef = useRef<HTMLInputElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const [shiftHeld, setShiftHeld] = useState(false);
     const saved = UIState.get("triggers");
+    const shiftHeld = useShiftHeld();
     const [search, setSearch] = useState(saved.search);
-    const [typeFilter, setTypeFilter] = useState<TriggerType | "all">(saved.typeFilter);
+    const [typeFilter, setTypeFilter] = useState<TypeFilter>(saved.typeFilter);
     const { useButtonsForOrderingTriggers: useButtonsForOrdering, useTriggerTabContextMenu: useContextMenu } = settings.use([
         "useButtonsForOrderingTriggers",
         "useTriggerTabContextMenu",
@@ -578,44 +377,17 @@ export function TriggersTab() {
         UIState.set("triggers", { search: v });
     };
 
-    const handleTypeFilterChange = (f: TriggerType | "all") => {
+    const handleTypeFilterChange = (f: TypeFilter) => {
         setTypeFilter(f);
         UIState.set("triggers", { typeFilter: f });
     };
-
-    useEffect(() => {
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Shift") setShiftHeld(true);
-
-            // // handle pasting
-            // if (e.key === "v" && (e.ctrlKey || e.metaKey)) {
-            //     navigator.clipboard.readText().then(text => {
-            //         if (!text.trim()) return;
-            //         importTriggersFromJson(text, "merge").then(result => {
-            //             if (result.ok) showToast(`Imported ${result.imported} trigger(s) from clipboard!`, Toasts.Type.SUCCESS);
-            //         });
-            //     }).catch(() => { });
-            // }
-        };
-        const onKeyUp = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
-        const onBlur = () => setShiftHeld(false);
-        window.addEventListener("keydown", onKeyDown);
-        window.addEventListener("keyup", onKeyUp);
-        window.addEventListener("blur", onBlur);
-        return () => {
-            window.removeEventListener("keydown", onKeyDown);
-            window.removeEventListener("keyup", onKeyUp);
-            window.removeEventListener("blur", onBlur);
-        };
-    }, []);
 
     const filtered = React.useMemo(() => {
         const q = parseQuery(search);
         return applyQuery(triggers, q, typeFilter);
     }, [triggers, search, typeFilter]);
 
-    // Ordering (drag or legacy ▲▼) is purely visual, so it's disabled while any
-    // filter narrows the list — pill filter or text search alike.
+    // Reordering is off while a filter or search narrows the list
     const orderingDisabled = filtered.length !== triggers.length;
 
     const showImportModeAlert = (json: string) => {
@@ -632,15 +404,15 @@ export function TriggersTab() {
                         <Button variant="positive" style={{ flex: 1 }} onClick={() => {
                             Alerts.close();
                             importTriggersFromJson(json, "merge").then(result => {
-                                if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
-                                else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
+                                if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, "success");
+                                else showToast(`Import failed: ${result.error}`, "failure");
                             });
                         }}>Add as new</Button>
                         <Button variant="dangerPrimary" style={{ flex: 1 }} onClick={() => {
                             Alerts.close();
                             importTriggersFromJson(json, "replace").then(result => {
-                                if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, Toasts.Type.SUCCESS);
-                                else showToast(`Import failed: ${result.error}`, Toasts.Type.FAILURE);
+                                if (result.ok) showToast(`Imported ${result.imported} trigger(s)!`, "success");
+                                else showToast(`Import failed: ${result.error}`, "failure");
                             });
                         }}>Replace</Button>
                     </div>
@@ -659,33 +431,13 @@ export function TriggersTab() {
         reader.readAsText(file);
     };
 
-    const handleImportMenu = () => {
-        Alerts.show({
-            title: "Import Triggers",
-            body: (
-                <div style={{ minWidth: "350px", display: "flex", flexDirection: "column", gap: 8 }}>
-                    <Paragraph>Choose an import source:</Paragraph>
-                    <Button variant="secondary" style={{ width: "100%" }} onClick={() => {
-                        Alerts.close();
-                        showImportModeAlert(JSON.stringify(defaultTriggers)); // import do teu triggers.json
-                    }}>Default Triggers</Button>
-                    <Button variant="secondary" style={{ width: "100%" }} onClick={() => {
-                        Alerts.close();
-                        importRef.current?.click();
-                    }}>From File</Button>
-                </div>
-            ),
-            confirmText: "Cancel",
-        });
-    };
-
     const handleExport = () => {
         confirmWebhookThenRun(triggers, () => {
             try {
                 downloadTriggersJson();
-                showToast("Successfully exported triggers!", Toasts.Type.SUCCESS);
+                showToast("Successfully exported triggers!", "success");
             } catch (error) {
-                showToast(`Failed to export triggers: ${error}`, Toasts.Type.FAILURE);
+                showToast(`Failed to export triggers: ${error}`, "failure");
             }
         });
     };
@@ -701,9 +453,9 @@ export function TriggersTab() {
             onConfirm: () => {
                 try {
                     downloadTriggersJsonRedacted({ redact: [...currentFields] });
-                    showToast("Successfully exported triggers!", Toasts.Type.SUCCESS);
+                    showToast("Successfully exported triggers!", "success");
                 } catch (error) {
-                    showToast(`Failed to export triggers: ${error}`, Toasts.Type.FAILURE);
+                    showToast(`Failed to export triggers: ${error}`, "failure");
                 }
             },
         });
@@ -717,17 +469,15 @@ export function TriggersTab() {
         reorderTriggers(newOrder);
     };
 
-    // `slot` is "insert right before the item currently at real array index `slot`"
-    // (or, when slot === triggers.length, "insert at the very end") — measured
-    // against the array as it stands BEFORE the dragged item is removed.
+    // `slot`: insert before the item at this index (or at the end when slot === triggers.length),
+    // counted before the dragged item is removed.
     const moveToSlot = (fromIndex: number, slot: number) => {
         move(fromIndex, slot > fromIndex ? slot - 1 : slot);
     };
 
-    // ─── Drag-to-reorder (pointer-based) ───────────────────────────────────────
-    // Native HTML5 drag-and-drop is unreliable for custom previews inside Electron
-    // (drag image, overflow clipping on the insertion line, tiny native hitboxes),
-    // so this is driven entirely by pointer events + manual hit-testing instead.
+    // --- Drag to reorder ---
+    // Uses pointer events because native drag-and-drop is unreliable in Electron
+    // (drag image, clipping, tiny hitboxes).
     const [drag, setDrag] = useState<{
         fromIndex: number;
         width: number;
@@ -774,10 +524,7 @@ export function TriggersTab() {
                     .sort((a, b) => a.idx - b.idx);
 
                 if (rows.length > 0) {
-                    // One canonical Y per possible insertion slot (N rows → N+1 slots).
-                    // Internal slots sit at the midpoint of the gap between two rows,
-                    // so there's exactly one Y for "between row 2 and row 3" — not two
-                    // (row 2's bottom edge vs row 3's top edge) like hit-testing per-row gave.
+                    // One Y per insertion slot (N rows give N+1 slots), in the middle of the gap between rows
                     const slotYs = rows.map((r, i) =>
                         i === 0 ? r.rect.top : (rows[i - 1].rect.bottom + r.rect.top) / 2
                     );
@@ -832,58 +579,81 @@ export function TriggersTab() {
         };
     }, [drag?.fromIndex]);
 
-    return (
-        <div ref={wrapperRef} style={{ ...s.wrapper, position: "relative" }}>
+    const openMoreMenu = (e: React.MouseEvent) => {
+        ContextMenuApi.openContextMenu(e, () => (
+            <Menu.Menu navId="vc-sora-triggers-more" onClose={ContextMenuApi.closeContextMenu} aria-label="Trigger options">
+                <Menu.MenuItem id="vc-sora-triggers-import-file" label="Import from file" action={() => importRef.current?.click()} />
+                <Menu.MenuItem id="vc-sora-triggers-import-defaults" label="Import default triggers" action={() => showImportModeAlert(JSON.stringify(defaultTriggers))} />
+                <Menu.MenuSeparator />
+                <Menu.MenuItem id="vc-sora-triggers-export" label="Export" disabled={!triggers.length} action={handleExport} />
+                {isDeveloper() && <Menu.MenuItem id="vc-sora-triggers-safe-export" label="Safe export" disabled={!triggers.length} action={handlePublicExport} />}
+            </Menu.Menu>
+        ));
+    };
 
-            {/* Filters */}
-            <div style={s.filters}>
-                <TextInput
-                    value={search}
-                    onChange={handleSearchChange}
-                    placeholder="Search or query: enabled:true  join:false  priority:>5  notify:true"
-                />
-                <div style={s.quickFilters}>
-                    {QUICK_FILTERS.map(f => (
-                        <QuickFilterBtn
-                            key={f.type}
-                            label={f.label}
-                            variant={f.variant}
-                            active={typeFilter === f.type}
-                            onClick={() => handleTypeFilterChange(f.type)}
-                        />
-                    ))}
+    const activeType = typeFilter === "all" ? null : TYPE_META[typeFilter];
+
+    return (
+        <div ref={wrapperRef} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, gap: 8, position: "relative" }}>
+            <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="vc-sora-triggers-bar">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <TextInput value={search} onChange={handleSearchChange} placeholder="Search triggers" />
+                    </div>
+                    <button
+                        type="button"
+                        className={`vc-sora-triggers-sbtn${activeType ? " active" : ""}`}
+                        style={activeType ? { "--sora-c": activeType.color } as React.CSSProperties : undefined}
+                        onClick={e => openTypeFilterMenu(e, triggers, typeFilter, handleTypeFilterChange)}
+                    >
+                        <FilterIcon />
+                        {activeType?.label ?? "All types"}
+                    </button>
+                    <Tooltip text="More options">
+                        {props => (
+                            <button {...props} type="button" aria-label="More options" className="vc-sora-triggers-sbtn" style={{ padding: "0 11px" }} onClick={openMoreMenu}>
+                                <MoreIcon />
+                            </button>
+                        )}
+                    </Tooltip>
+                    <Button size="medium" variant="positive" onClick={openAddTriggerModal}>+ New</Button>
                 </div>
+                <span className="vc-sora-triggers-hint">
+                    Filter with <code>enabled:</code> <code>join:</code> <code>notify:</code> <code>lock:</code> <code>priority:&gt;5</code>
+                    {filtered.length !== triggers.length && <> · showing {filtered.length} of {triggers.length}</>}
+                </span>
                 <JoinLockBanner />
             </div>
 
-            {/* List */}
-            <div ref={containerRef} style={s.container}>
+            <div ref={containerRef} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <ScrollerThin style={{ flex: 1, minHeight: 0 }}>
                 {filtered.length === 0
                     ? (
-                        <div style={s.empty}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", minHeight: 200, color: COLORS.muted }}>
                             <Paragraph size="sm">
                                 {triggers.length === 0
-                                    ? "No triggers yet. Create a new trigger or import some from a file!"
+                                    ? "No triggers yet. Create one, or import some from the ⋯ menu."
                                     : "No triggers match your search."}
                             </Paragraph>
                         </div>
                     )
                     : (
-                        <div style={s.list}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingBottom: 8 }}>
                             {filtered.map((t, i) => {
-                                // i no array filtrado — pra order buttons precisamos do índice real
+                                // order buttons need the index in the full list, not the filtered one
                                 const realIdx = triggers.indexOf(t);
                                 return (
                                     <TriggerCard
                                         key={t.id}
                                         trigger={t}
                                         index={realIdx}
+                                        position={i}
                                         isFirst={realIdx === 0}
                                         isLast={realIdx === triggers.length - 1}
-                                        shiftHeld={shiftHeld}
                                         orderingDisabled={orderingDisabled}
                                         useButtonsForOrdering={useButtonsForOrdering}
                                         useContextMenu={useContextMenu}
+                                        shiftHeld={shiftHeld}
                                         isDragging={drag?.fromIndex === realIdx}
                                         onMoveUp={() => move(realIdx, realIdx - 1)}
                                         onMoveDown={() => move(realIdx, realIdx + 1)}
@@ -894,68 +664,41 @@ export function TriggersTab() {
                         </div>
                     )
                 }
-
-                {/* Insertion indicator — where the dragged trigger will land */}
-                {drag?.indicator && (
-                    <div style={{
-                        position: "absolute",
-                        top: drag.indicator.top - 1.5,
-                        left: drag.indicator.left,
-                        width: drag.indicator.width,
-                        height: 3,
-                        borderRadius: 2,
-                        background: "var(--green-360, #23a55a)",
-                        pointerEvents: "none",
-                        zIndex: 30,
-                    }} />
-                )}
+            </ScrollerThin>
             </div>
 
-            {/* Floating preview that follows the cursor while dragging — portaled to
-                <body> so it isn't clipped by the modal's own overflow:hidden if it's
-                dragged past the modal's edge. */}
-            {drag && ReactDOM.createPortal(
+            {/* Where the dragged trigger will land */}
+            {drag?.indicator && (
                 <div style={{
-                    position: "fixed",
-                    top: drag.pointerClientY - drag.grabOffsetY,
-                    left: drag.pointerClientX - drag.grabOffsetX,
-                    width: drag.width,
-                    borderRadius: 8,
-                    boxShadow: "0 12px 28px rgba(0, 0, 0, 0.45)",
-                    opacity: 0.96,
+                    position: "absolute",
+                    top: drag.indicator.top - 1.5,
+                    left: drag.indicator.left,
+                    width: drag.indicator.width,
+                    height: 3,
+                    borderRadius: 2,
+                    background: "var(--green-360, #23a55a)",
                     pointerEvents: "none",
-                    zIndex: 9999,
-                }}>
-                    <DragGhost trigger={triggers[drag.fromIndex]} />
-                </div>,
-                document.body
+                    zIndex: 30,
+                }} />
             )}
 
-            {/* <CollapsibleTip title="Tips">Left click on a trigger to edit it. Right click to toggle between enabled/disabled. Hold Shift to show delete button.</CollapsibleTip> */}
-            {/* Toolbar */}
-            <div style={s.toolbar}>
-                <Paragraph>
-                    {filtered.length === triggers.length
-                        ? `${triggers.length} trigger${triggers.length !== 1 ? "s" : ""}`
-                        : `${filtered.length} of ${triggers.length}`}
-                </Paragraph>
-                <div style={s.toolbarRight}>
-                    {isDeveloper() && (
-                        <Button size="small" variant="link" onClick={handlePublicExport}>
-                            Safe Export
-                        </Button>
-                    )}
-                    <Button size="small" variant="link" onClick={handleExport}>
-                        Export
-                    </Button>
-                    <Button size="small" variant="link" onClick={handleImportMenu}>
-                        Import
-                    </Button>
-                    <Button size="small" variant="positive" onClick={openAddTriggerModal}>
-                        + New trigger
-                    </Button>
-                </div>
-            </div>
+            {/* Drag preview, portaled to <body> so the modal doesn't clip it */}
+            {drag && ReactDOM.createPortal(
+            <div style={{
+                position: "fixed",
+                top: drag.pointerClientY - drag.grabOffsetY,
+                left: drag.pointerClientX - drag.grabOffsetX,
+                width: drag.width,
+                borderRadius: 8,
+                boxShadow: "0 12px 28px rgba(0, 0, 0, 0.45)",
+                opacity: 0.96,
+                pointerEvents: "none",
+                zIndex: 9999,
+            }}>
+                <DragGhost trigger={triggers[drag.fromIndex]} />
+            </div>,
+            document.body
+            )}
 
             <input
                 ref={importRef}

@@ -6,19 +6,19 @@
 
 import { CodeBlock } from "@components/CodeBlock";
 import { Divider } from "@components/Divider";
-import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { Channel, Guild, Message } from "@vencord/discord-types";
 import { React } from "@webpack/common";
 
 import { flattenEmbeds, getSnipableLink, isMessageAllowed, isValidMessage, resolveTrigger, sanitizeContent } from "../../services/MessageProcessor";
 import { settings } from "../../settings";
+import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "./LegacyModal";
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// --- Styles ---
 
 const headerTitle: React.CSSProperties = { fontWeight: 700, fontSize: "1rem", flex: 1, color: "var(--text-default)" };
 const sectionLabel: React.CSSProperties = { fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" };
 
-// ─── Analysis ─────────────────────────────────────────────────────────────────
+// --- Analysis ---
 
 interface DebugStep {
     label: string;
@@ -33,14 +33,14 @@ interface AnalysisResult {
 
 function analyze(_message: Message, channel: Channel, guild: Guild): AnalysisResult {
     const steps: DebugStep[] = [];
-    const message = { ..._message, embeds: [..._message.embeds] } as Message; // me when i lie
+    const message = { ..._message, embeds: [..._message.embeds] } as Message; // copy, so the analysis never changes the real message
 
     const isNativeForward = Array.isArray((_message as any).messageSnapshots) && (_message as any).messageSnapshots.length > 0;
     if (isNativeForward) {
         steps.push({
             label: "Discord forward",
             ok: false,
-            detail: "This is a natively forwarded message (messageSnapshots detected). The plugin only processes original messages — forwarded messages are ignored.",
+            detail: "This is a natively forwarded message (messageSnapshots detected). The plugin only processes original messages. Forwarded messages are ignored.",
         });
         return { steps, interpretedContent: message.content };
     }
@@ -51,7 +51,7 @@ function analyze(_message: Message, channel: Channel, guild: Guild): AnalysisRes
         ok: valid,
         detail: valid
             ? "Not a self-forward or re-forward."
-            : "Matches the self-forward or re-forward filter — would be silently ignored.",
+            : "Matches the self-forward or re-forward filter, so it would be silently ignored.",
     });
     if (!valid) return { steps, interpretedContent: message.content };
 
@@ -76,17 +76,17 @@ function analyze(_message: Message, channel: Channel, guild: Guild): AnalysisRes
 
     const noLinkHints: string[] = [];
     if (_message.embeds.length > 0 && !settings.store.flattenEmbeds)
-        noLinkHints.push("This message has embeds — enable \"Interpret Embeds\" in Snipe Configuration.");
+        noLinkHints.push("This message has embeds. Enable \"Interpret Embeds\" in Snipe Configuration.");
     else if (_message.embeds.length > 0 && settings.store.flattenEmbeds && !settings.store.advancedEmbedFlattening)
         noLinkHints.push("Embeds were interpreted but the link wasn't found. If it's inside embed fields or buttons, enable \"Advanced Embed Flattening\" in Advanced settings.");
     if (multipleTypes && !settings.store.resolveAmbiguousLinks)
-        noLinkHints.push("Multiple link types detected — enable \"Force Match on Multiple Links\" in Snipe Configuration.");
+        noLinkHints.push("Multiple link types detected. Enable \"Force Match on Multiple Links\" in Snipe Configuration.");
 
     steps.push({
         label: "Link detection",
         ok: !!link,
         detail: link
-            ? `${link.type.toUpperCase()} link — code: ${link.code}${link.type === "private" ? `, place: ${link.placeId}` : ""}`
+            ? `${link.type.toUpperCase()} link, code: ${link.code}${link.type === "private" ? `, place: ${link.placeId}` : ""}`
             : noLinkHints.length > 0
                 ? <>{noLinkHints.map((h, i) => <div key={i} style={{ marginTop: i > 0 ? 3 : 0 }}>• {h}</div>)}</>
                 : "No Roblox link found in this message.",
@@ -130,7 +130,7 @@ function analyze(_message: Message, channel: Channel, guild: Guild): AnalysisRes
     return { steps, interpretedContent };
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// --- Modal ---
 
 function DebugModal({ props, message, channel, guild }: {
     props: ModalProps;
@@ -205,7 +205,7 @@ function DebugModal({ props, message, channel, guild }: {
     );
 }
 
-// ─── Entry point ──────────────────────────────────────────────────────────────
+// --- Entry point ---
 
 export function openMessageDebugModal(message: Message, channel: Channel, guild: Guild) {
     openModal(props => (

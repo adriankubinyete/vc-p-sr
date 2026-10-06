@@ -5,11 +5,11 @@
  */
 
 import { showNotification } from "@api/Notifications";
-import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
 import type { RunningGame } from "@vencord/discord-types";
 import { RunningGameStore } from "@webpack/common";
 
+import { Logger } from "../logger";
 import { settings } from "../settings";
 import { SnipableLink } from "../types";
 import { BiomeDetector } from "./BiomeDetector";
@@ -19,13 +19,11 @@ const logger = new Logger("SolRadar.RobloxService");
 
 const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("../native")>;
 
-// ─── Join URI ─────────────────────────────────────────────────────────────────
-// Ambos os tipos de link viram deeplinks diretos — sem chamada à API do Roblox.
-//
-// Share link  (/share?code=...)             → roblox://navigation/share_links?code=...&type=Server
-// Private link (/games/{id}?privateSer...) → roblox://experiences/start?placeId={id}&linkCode=...
-//
-// Referência: https://devforum.roblox.com/t/parsing-deeplink-information-from-a-private-server-link-with-the-newer-format/3464724
+// --- Join URI ---
+// Both link types become deeplinks directly, with no Roblox API call:
+// Share link   (/share?code=...)            -> roblox://navigation/share_links?code=...&type=Server
+// Private link (/games/{id}?privateSer...)  -> roblox://experiences/start?placeId={id}&linkCode=...
+// See https://devforum.roblox.com/t/parsing-deeplink-information-from-a-private-server-link-with-the-newer-format/3464724
 
 export function buildJoinUri(link: SnipableLink | string): string {
     if (typeof link === "string") {
@@ -42,34 +40,24 @@ export function buildJoinUri(link: SnipableLink | string): string {
     return `roblox://experiences/start?placeId=${link.placeId}&linkCode=${link.code}`;
 }
 
-// ─── Processo do Roblox via RunningGameStore ──────────────────────────────────
-// O Discord já rastreia processos em execução via RunningGameStore —
-// sem precisar de powershell, wmic ou chamadas nativas.
+// --- Roblox process (RunningGameStore) ---
+// Discord already tracks running games, so no native process calls are needed here.
 
-const ROBLOX_EXE = "robloxplayerbeta.exe"; // exeName é sempre lowercase no store
+const ROBLOX_EXE = "robloxplayerbeta.exe"; // exeName is always lowercase
 
 /**
- * Returns the Roblox process from the RunningGameStore, or null if it's not running.
- *
- * !! This is unreliable: if Discord restarts and the Roblox process is still running,
- * it will not be detected unless navigated to. Also, on close, the process takes
- * a few seconds to disappear from the RunningGameStore.
- *
- * For that reason, this CANNOT be trusted for "closeGameIfNeeded": if this
- * is not updated in time OR the Roblox process is not running, the join could fail.
- *
- * It could be used for quick checks, but shouldn't be used for anything important.
+ * The Roblox process from RunningGameStore, or null.
+ * Unreliable: after a Discord restart a running Roblox may not show up, and a closed one
+ * takes a few seconds to disappear. Fine for quick checks, not for anything the join depends on.
  */
 export function getRobloxProcess(): RunningGame | null {
     const games: RunningGame[] = RunningGameStore.getRunningGames() ?? [];
     logger.debug("Running games:", games);
-    // @ts-ignore shut the #### up?
+    // @ts-ignore RunningGame typings are incomplete
     return games.find(g => g.exeName === ROBLOX_EXE) ?? null;
 }
 
-/**
- * Retorna true se o Roblox estiver em execução no momento.
- */
+/** Whether Roblox is running right now. */
 export function isRobloxRunning(): boolean {
     return getRobloxProcess() !== null;
 }
@@ -172,10 +160,8 @@ export async function emulatorJoinLink(link: SnipableLink | string): Promise<Emu
     return emulatorJoinUri(buildJoinUri(link));
 }
 
-// the adb join method needs a specific scenario to work:
-// on main, be on homepage
-// on emulator, be on your private server (so you dont stop rolling)
-// this function basically automates that
+// The ADB join method needs Roblox on the home page on PC and your private server
+// open on the emulator (so it keeps rolling). This sets that up.
 export type PrepareAdbResult =
     | { ok: true; }
     | { ok: false; error: string; };
@@ -232,7 +218,7 @@ export async function joinOwnPrivateServer(): Promise<void> {
     }
 }
 
-// testing stuff below here, clean it up for next update, currently only on dev page
+// Experimental, only used by the Developer tab
 
 const NORMAL_BIOME = "EGGLAND";
 

@@ -5,16 +5,12 @@
  */
 
 import { Paragraph } from "@components/Paragraph";
-import { Alerts, React, showToast, Toasts } from "@webpack/common";
+import { Alerts, React, showToast } from "@webpack/common";
 
 import { downloadTriggerJsonRedacted, RedactField, Trigger } from "../../../stores/TriggerStore";
 import { PublicExportOptions } from "./PublicExportOptions";
 
-/**
- * Shows the same "this trigger has a webhook configured" warning used by the
- * toolbar's bulk export, scoped to any list of triggers (usually just one).
- * Calls `run()` immediately if none of them have a webhook configured.
- */
+/** Warns before exporting triggers that have a webhook (same warning as the bulk export). Runs `run` right away if none do. */
 export function confirmWebhookThenRun(triggers: Trigger[], run: () => void): void {
     const triggersWithWebhooks = triggers.filter(t => t.forwarding.webhookUrl.trim());
 
@@ -44,9 +40,9 @@ export function copyTriggerToClipboard(trigger: Trigger): void {
     try {
         const { id, ...rest } = trigger;
         navigator.clipboard.writeText(JSON.stringify([rest], null, 2));
-        showToast("Trigger copied to clipboard!", Toasts.Type.SUCCESS);
+        showToast("Trigger copied to clipboard!", "success");
     } catch (e) {
-        showToast(`Failed to copy trigger: ${e}`, Toasts.Type.FAILURE);
+        showToast(`Failed to copy trigger: ${e}`, "failure");
     }
 }
 
@@ -54,16 +50,16 @@ export function openSafeExportDialogForTrigger(trigger: Trigger): void {
     let currentFields = new Set<RedactField>(["webhookUrl", "webhookForwarding", "notificationSound", "enabled", "customTriggers"]);
 
     Alerts.show({
-        title: `Safe Export — ${trigger.name}`,
+        title: `Safe Export: ${trigger.name}`,
         body: <PublicExportOptions onChange={fields => { currentFields = fields; }} />,
         confirmText: "Export",
         cancelText: "Cancel",
         onConfirm: () => {
             try {
                 downloadTriggerJsonRedacted(trigger, { redact: [...currentFields] });
-                showToast("Trigger exported (safe)!", Toasts.Type.SUCCESS);
+                showToast("Trigger exported (safe)!", "success");
             } catch (error) {
-                showToast(`Failed to export trigger: ${error}`, Toasts.Type.FAILURE);
+                showToast(`Failed to export trigger: ${error}`, "failure");
             }
         },
     });

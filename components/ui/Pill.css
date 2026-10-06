@@ -9,7 +9,7 @@
     line-height: 1.2;
 }
 
-/* ─── Sizes ───────────────────────────────────────────────────────────────── */
+/* --- Sizes --- */
 
 .vc-sora-pill-iconOnly {
     gap: 0;
@@ -37,7 +37,7 @@
     font-size: 12px;
 }
 
-/* ─── Radius ──────────────────────────────────────────────────────────────── */
+/* --- Radius --- */
 
 .vc-sora-pill-radius-full {
     border-radius: 9999px;
@@ -63,23 +63,23 @@
     border-radius: 0;
 }
 
-/* ─── Border ──────────────────────────────────────────────────────────────── */
+/* --- Border --- */
 
 .vc-sora-pill-border-none {
     border: 1px solid transparent;
 }
 
-/* borda da mesma cor do texto com baixa opacidade */
+/* text color at low opacity */
 .vc-sora-pill-border-subtle {
     border: 1px solid color-mix(in srgb, currentcolor 30%, transparent);
 }
 
-/* borda sólida na cor do texto */
+/* solid text color */
 .vc-sora-pill-border-strong {
     border: 1px solid currentcolor;
 }
 
-/* ─── Variants ────────────────────────────────────────────────────────────── */
+/* --- Variants --- */
 
 .vc-sora-pill-green {
     background: color-mix(in srgb, var(--green-360) 15%, transparent);

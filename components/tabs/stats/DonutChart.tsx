@@ -8,16 +8,12 @@ import "./DonutChart.css";
 
 import { React, Tooltip } from "@webpack/common";
 
-export const DONUT_OTHER_COLOR = "#898781"; // neutral gray: "Other" is a residual bucket, not an identity
+export const DONUT_OTHER_COLOR = "#898781"; // neutral gray, "Other" is not a real label
 export const DONUT_MAX_SLICES = 3;
 
 /**
- * Deterministic text -> color hash: the same label always maps to the same hue,
- * so "Sol's RNG" (as a server or a trigger) is always the same color everywhere.
- * Fixed saturation/lightness keep every generated color similarly legible; only
- * the hue varies. Note: unlike a small curated palette, two different labels can
- * hash to a similar hue (no colorblind-pair guarantee), traded off deliberately
- * per request, in favor of "same identity, same color" over palette-safety.
+ * Hashes a label to a hue, so the same name always gets the same color everywhere.
+ * Two different labels can still land on similar hues.
  */
 export function hashLabelToColor(label: string): string {
     let hash = 0;
@@ -85,7 +81,7 @@ interface DonutChartProps {
 
 const RING_THICKNESS = 16;
 const RING_THICKNESS_HOVER = 20;
-const SEGMENT_GAP_DEG = 2.5; // gap between segments, as an angle so it scales with the ring
+const SEGMENT_GAP_DEG = 2.5; // an angle, so the gap scales with the ring
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
     const rad = (angleDeg * Math.PI) / 180;
@@ -93,14 +89,9 @@ function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
 }
 
 /**
- * Builds a filled donut-segment polygon (outer arc + inner arc, closed) for one slice.
- *
- * Deliberately NOT a `stroke`-on-a-circle/arc: stroking a very wide arc (a slice can
- * span up to ~357°) produces self-intersection seams in the stroke-offset geometry at
- * some engine-dependent point along the arc, especially when the stroke width changes
- * (the hover-thickened segment showed a visible notch because of this). A plain filled
- * ring-segment polygon has no stroke-offset math to go wrong; it's the same technique d3's
- * arc generator uses.
+ * Filled ring-segment path for one slice.
+ * A stroked arc showed seams on very wide slices (worse on hover), so the shape is drawn
+ * directly, like d3's arc generator does.
  */
 function describeRingSegment(
     cx: number, cy: number,

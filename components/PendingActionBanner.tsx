@@ -9,7 +9,7 @@ import { React, useEffect, useReducer, useState } from "@webpack/common";
 
 import { PendingActionState, PendingActionStore } from "../services/ActionExecutor";
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// --- Hook ---
 
 export function usePendingAction(): PendingActionState | null {
     const [state, setState] = useState<PendingActionState | null>(() => PendingActionStore.current);
@@ -17,7 +17,7 @@ export function usePendingAction(): PendingActionState | null {
     return state;
 }
 
-// ─── Banner ───────────────────────────────────────────────────────────────────
+// --- Banner ---
 
 export type PendingActionBannerVariant = "minimal" | "full";
 

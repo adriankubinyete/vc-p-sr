@@ -5,8 +5,8 @@
  */
 
 import { showNotification } from "@api/Notifications";
-import { Logger } from "@utils/Logger";
 
+import { Logger } from "../logger";
 import { settings } from "../settings";
 import { closeGame, goToHome, joinLink, joinSolsPublicServer, prepareAdb } from "./RobloxService";
 
@@ -14,7 +14,7 @@ const logger = new Logger("SolRadar:Action");
 
 export type UserAction = "nothing" | "public" | "close" | "private" | "home" | "prep-adb";
 
-// ─── Pending Action Store ─────────────────────────────────────────────────────
+// --- Pending action ---
 
 export interface PendingActionState {
     title: string;
@@ -28,7 +28,7 @@ const _listeners = new Set<(s: PendingActionState | null) => void>();
 
 function _setPending(s: PendingActionState | null): void {
     _pending = s;
-    for (const fn of _listeners) { try { fn(s); } catch { /* */ } }
+    for (const fn of _listeners) { try { fn(s); } catch { } }
 }
 
 export const PendingActionStore = {
@@ -106,7 +106,7 @@ export function scheduleCancelableAction({ action, timeoutMs, title, iconUrl, de
     const label = ACTION_LABELS[action] ?? action;
 
     if (settings.store.skipActionConfirmation) {
-        logger.info(`Executing immediately (confirmation skipped): ${label} — ${title}`);
+        logger.info(`Executing immediately (confirmation skipped): ${label}: ${title}`);
         executeAction(action);
         return;
     }
@@ -115,7 +115,7 @@ export function scheduleCancelableAction({ action, timeoutMs, title, iconUrl, de
 
     let cancelled = false;
     const seconds = Math.round(timeoutMs / 1000);
-    logger.info(`Scheduled: ${label} in ${seconds}s — ${title}`);
+    logger.info(`Scheduled: ${label} in ${seconds}s: ${title}`);
 
     const timer = setTimeout(() => {
         _cancelFn = null;

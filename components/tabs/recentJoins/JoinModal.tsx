@@ -4,36 +4,26 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./history.css";
+
 import { Button } from "@components/Button";
-import { Divider } from "@components/Divider";
-import { Heading } from "@components/Heading";
+import { CopyIcon, DeleteIcon } from "@components/Icons";
 import { copyToClipboard } from "@utils/clipboard";
-import { closeAllModals, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "@utils/modal";
-import { NavigationRouter, React, showToast, Toasts } from "@webpack/common";
+import { NavigationRouter, React, showToast, Tooltip } from "@webpack/common";
 
 import { joinUri } from "../../../services/RobloxService";
 import { settings } from "../../../settings";
 import { SnipeEntry, SnipeLogEntry, SnipeStore, useSnipeEntry } from "../../../stores/SnipeStore";
 import { SnipeTag } from "../../../types";
 import { formatElapsedTime } from "../../../utils";
+import { closeAllModals, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "../../ui/LegacyModal";
 import Spoiler from "../../ui/Spoiler";
-import { FallbackImage, formatTimeAgo, MessageTextarea,TagBadge } from "./components";
+import { COLORS, sectionTitle } from "../../ui/styles";
+import { FallbackImage, formatClock, getSnipeStatus } from "./components";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// --- Helpers ---
 
-export function DetailRow({ label, value }: { label: string; value: React.ReactNode; }) {
-    return (
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, fontSize: 13 }}>
-            <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>{label}</span>
-            <span style={{ color: "var(--control-secondary-text-default)", textAlign: "right" }}>{value}</span>
-        </div>
-    );
-}
-
-// ─── Biome verdict ────────────────────────────────────────────────────────────
-
-// When the user manually marks a biome verdict, we strip only these tags before
-// adding the new one — so real/bait never coexist and unrelated tags are untouched.
+// Marking a verdict replaces only these tags, so real and bait never coexist.
 const BIOME_VERDICT_TAGS: SnipeTag[] = [
     "biome-verified-real",
     "biome-verified-bait",
@@ -41,76 +31,246 @@ const BIOME_VERDICT_TAGS: SnipeTag[] = [
     "biome-not-verified",
 ];
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+const LEVEL_COLOR: Record<SnipeLogEntry["level"], string> = {
+    info: "var(--text-brand)",
+    warn: COLORS.warning,
+    error: COLORS.danger,
+    debug: COLORS.muted,
+};
 
-function SnipeLog({ entries }: { entries: SnipeLogEntry[]; }) {
-    const ref = React.useRef<HTMLDivElement>(null);
+const ms = (n: number) => `${Math.round(n)}ms`;
 
-    React.useEffect(() => {
-        if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-    }, [entries.length]);
+function typeLabel(type: string): string {
+    const words = type.toLowerCase().replace(/_/g, " ");
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
-    const formatTime = (ts: number) => {
-        const d = new Date(ts);
-        const h = d.getHours().toString().padStart(2, "0");
-        const m = d.getMinutes().toString().padStart(2, "0");
-        const s = d.getSeconds().toString().padStart(2, "0");
-        return `${h}:${m}:${s}`;
+function timeAgo(ts: number): string {
+    const minutes = Math.floor((Date.now() - ts) / 60_000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+}
+
+function logToText(log: SnipeLogEntry[]): string {
+    return log.map(l => `${formatClock(l.timestamp, true)} ${l.level.toUpperCase()} ${l.message}`).join("\n");
+}
+
+function Hidden({ anonymize, children, block }: { anonymize: boolean; children: React.ReactNode; block?: boolean; }) {
+    if (!anonymize) return <>{children}</>;
+    return (
+        <Spoiler
+            style={block ? { display: "block", width: "100%" } : undefined}
+            placeholder={block ? <span style={{ fontSize: 13, color: COLORS.muted }}>Hidden by Anonymize snipes. Click to reveal.</span> : undefined}
+        >
+            {children}
+        </Spoiler>
+    );
+}
+
+const card: React.CSSProperties = { borderRadius: 8, background: "var(--background-mod-subtle)" };
+
+// --- Sections ---
+
+function Timing({ entry }: { entry: SnipeEntry; }) {
+    const m = entry.metrics;
+    const isReal = entry.tags.includes("biome-verified-real");
+    const cells: [string, string, string][] = [
+        ["Total", m ? ms(m.timeToJoinMs) : "-", "Time from the message to launching Roblox"],
+        ["Plugin", m ? ms(m.overheadMs) : "-", "Time SolRadar spent before launching"],
+        ["Launch", m ? ms(m.openUriDurationMs) : "-", "Time to open the join link"],
+        ...(m?.killDurationMs != null ? [["Macro kill", ms(m.killDurationMs), "Time to close your macro"] as [string, string, string]] : []),
+        ["Biome lasted", isReal && entry.biomeDurationMs != null ? formatElapsedTime(entry.biomeDurationMs) : "-", "How long the real biome lasted"],
+    ];
+
+    return (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 6 }}>
+            {cells.map(([label, value, tip]) => (
+                <Tooltip key={label} text={tip}>
+                    {props => (
+                        <div {...props} style={{ ...card, display: "flex", flexDirection: "column", gap: 1, padding: "8px 10px" }}>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.text, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+                            <span style={{ fontSize: 11, color: COLORS.muted }}>{label}</span>
+                        </div>
+                    )}
+                </Tooltip>
+            ))}
+        </div>
+    );
+}
+
+function BiomeVerdict({ entry }: { entry: SnipeEntry; }) {
+    const mark = (verdict: "real" | "bait") => {
+        const tag: SnipeTag = verdict === "real" ? "biome-verified-real" : "biome-verified-bait";
+        SnipeStore.update(entry.id, { tags: [...entry.tags.filter(t => !BIOME_VERDICT_TAGS.includes(t)), tag] }, { replaceTags: true });
     };
 
-    const levelColor = (level: SnipeLogEntry["level"]) => {
-        switch (level) {
-            case "error": return "var(--text-feedback-critical)";
-            case "warn": return "var(--status-warning)";
-            case "debug": return "var(--text-muted)";
-            default: return "var(--text-brand)";
-        }
-    };
-
-    const copyLog = () => {
-        const text = entries
-            .map(l => `[${formatTime(l.timestamp)}] ${l.level.toUpperCase()} ${l.message}`)
-            .join("\n");
-        copyToClipboard(text);
-        showToast("Log copied!", Toasts.Type.SUCCESS);
+    const option = (verdict: "real" | "bait", label: string, color: string) => {
+        const active = entry.tags.includes(verdict === "real" ? "biome-verified-real" : "biome-verified-bait");
+        return (
+            <button
+                type="button"
+                onClick={() => mark(verdict)}
+                style={{
+                    border: "none",
+                    borderRadius: 4,
+                    padding: "3px 10px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    color: active ? color : COLORS.muted,
+                    background: active ? `color-mix(in srgb, ${color} 22%, transparent)` : "none",
+                }}
+            >
+                {label}
+            </button>
+        );
     };
 
     return (
-        <>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
-                <Button size="small" variant="none" onClick={copyLog}>click here to copy</Button>
+        <div style={{ ...card, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px" }}>
+            <span style={{ fontSize: 13, color: COLORS.label }}>Was this biome real?</span>
+            <div style={{ display: "flex", gap: 2, padding: 2, borderRadius: 6, background: "var(--background-mod-strong)" }}>
+                {option("real", "✓ Real", COLORS.positive)}
+                {option("bait", "✕ Fake", COLORS.danger)}
             </div>
-            <div ref={ref} style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 1,
+        </div>
+    );
+}
+
+function Details({ entry, anonymize }: { entry: SnipeEntry; anonymize: boolean; }) {
+    const rows: [string, React.ReactNode][] = [
+        ...(entry.authorName ? [["Posted by", (
+            <Hidden key="a" anonymize={anonymize}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <FallbackImage src={entry.authorAvatarUrl} style={{ width: 16, height: 16, borderRadius: "50%" }} />
+                    {entry.authorName}
+                </span>
+            </Hidden>
+        )] as [string, React.ReactNode]] : []),
+        ...(entry.channelName ? [["Channel", <Hidden key="c" anonymize={anonymize}>#{entry.channelName}</Hidden>] as [string, React.ReactNode]] : []),
+        ...(entry.guildName ? [["Server", <Hidden key="s" anonymize={anonymize}>{entry.guildName}</Hidden>] as [string, React.ReactNode]] : []),
+        ["Type", typeLabel(entry.triggerType)],
+        ["Priority", entry.triggerPriority],
+        ["Snipe ID", `#${entry.id}`],
+    ];
+
+    return (
+        <div style={{ ...card, padding: "2px 12px" }}>
+            {rows.map(([label, value], i) => (
+                <div
+                    key={label}
+                    style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "7px 0",
+                        fontSize: 13,
+                        borderTop: i === 0 ? "none" : "1px solid var(--background-mod-subtle)",
+                    }}
+                >
+                    <span style={{ color: COLORS.muted, flexShrink: 0 }}>{label}</span>
+                    <span style={{ color: COLORS.label, fontWeight: 500, textAlign: "right", minWidth: 0, overflowWrap: "anywhere" }}>{value}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function Story({ entry, anonymize }: { entry: SnipeEntry; anonymize: boolean; }) {
+    const steps = entry.log.filter(l => l.level !== "debug");
+    const relative = (ts: number) => {
+        const diff = (ts - entry.timestamp) / 1000;
+        return `+${diff.toFixed(diff < 1 ? 2 : 1)}s`;
+    };
+
+    const step = (key: React.Key, color: string, time: string, text: string, extra?: React.ReactNode, last?: boolean) => (
+        <div key={key} style={{ display: "flex", gap: 10, position: "relative", paddingBottom: last ? 0 : 12 }}>
+            {!last && <span style={{ position: "absolute", left: 5, top: 14, bottom: 0, width: 2, background: "var(--background-mod-subtle)" }} />}
+            <span style={{ flexShrink: 0, width: 12, height: 12, marginTop: 3, borderRadius: "50%", background: color, boxShadow: `0 0 0 3px color-mix(in srgb, ${color} 20%, transparent)` }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, color: COLORS.muted, fontVariantNumeric: "tabular-nums" }}>{time}</div>
+                <div style={{ fontSize: 13.5, color: COLORS.label, overflowWrap: "anywhere" }}>{text}</div>
+                {extra}
+            </div>
+        </div>
+    );
+
+    const quote = entry.processedMessageText && (
+        <div style={{ display: "flex", gap: 8, marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "var(--background-mod-subtle)" }}>
+            <FallbackImage src={entry.authorAvatarUrl} style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, marginTop: 1 }} />
+            <div style={{ minWidth: 0 }}>
+                {entry.authorName && <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.label }}>{entry.authorName}</div>}
+                <div style={{ fontSize: 13, color: COLORS.text, overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>{entry.processedMessageText}</div>
+            </div>
+        </div>
+    );
+
+    return (
+        <Hidden anonymize={anonymize} block>
+            <div style={{ display: "flex", flexDirection: "column", paddingLeft: 4 }}>
+                {step("matched", "var(--text-brand)", formatClock(entry.timestamp), `Message matched ${entry.triggerName}`, quote, steps.length === 0)}
+                {steps.map((l, i) => step(i, LEVEL_COLOR[l.level], relative(l.timestamp), l.message, undefined, i === steps.length - 1))}
+            </div>
+        </Hidden>
+    );
+}
+
+function RawLog({ log, anonymize }: { log: SnipeLogEntry[]; anonymize: boolean; }) {
+    return (
+        <Hidden anonymize={anonymize} block>
+            <div style={{
+                padding: "8px 10px",
+                borderRadius: 6,
+                background: "var(--background-mod-strong)",
                 fontFamily: "var(--font-code)",
                 fontSize: 12,
-                background: "var(--background-tertiary)",
-                border: "1px solid var(--background-mod-subtle)",
-                borderRadius: 6,
-                padding: "8px 10px",
-                maxHeight: 200,
-                overflowY: "auto",
-                scrollbarWidth: "thin",
+                lineHeight: 1.65,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
             }}>
-                {entries.map((line, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, lineHeight: 1.6 }}>
-                        <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>
-                            {formatTime(line.timestamp)}
-                        </span>
-                        <span style={{ color: levelColor(line.level), flexShrink: 0, minWidth: 36 }}>
-                            {line.level.toUpperCase()}
-                        </span>
-                        <span style={{ color: "var(--text-default)", flex: 1, minWidth: 0, wordBreak: "break-word" }}>
-                            {line.message}
-                        </span>
+                {log.map((l, i) => (
+                    <div key={i}>
+                        <span style={{ color: COLORS.muted }}>{formatClock(l.timestamp, true)} </span>
+                        <span style={{ color: LEVEL_COLOR[l.level], fontWeight: 600 }}>{l.level.toUpperCase().padEnd(5)} </span>
+                        <span style={{ color: COLORS.text }}>{l.message}</span>
                     </div>
                 ))}
             </div>
-        </>
+        </Hidden>
     );
 }
+
+function ViewSwitch({ view, onChange }: { view: "timeline" | "raw"; onChange: (v: "timeline" | "raw") => void; }) {
+    return (
+        <div style={{ display: "flex", gap: 2, padding: 2, borderRadius: 6, background: "var(--background-mod-strong)" }}>
+            {(["timeline", "raw"] as const).map(v => (
+                <button
+                    key={v}
+                    type="button"
+                    onClick={() => onChange(v)}
+                    style={{
+                        border: "none",
+                        borderRadius: 4,
+                        padding: "3px 10px",
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        color: view === v ? COLORS.text : COLORS.muted,
+                        background: view === v ? "var(--background-mod-normal)" : "none",
+                    }}
+                >
+                    {v === "timeline" ? "Timeline" : "Raw"}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+// --- Modal ---
 
 function JoinModal({ entry: initialEntry, modalProps }: {
     entry: SnipeEntry;
@@ -118,6 +278,9 @@ function JoinModal({ entry: initialEntry, modalProps }: {
 }) {
     const entry = useSnipeEntry(initialEntry.id) ?? initialEntry;
     const { anonymizeEverything } = settings.use(["anonymizeEverything"]);
+    const [view, setView] = React.useState<"timeline" | "raw">("timeline");
+    const status = getSnipeStatus(entry);
+    const isBiomeEntry = entry.tags.some(t => t.startsWith("biome-"));
 
     const jumpToMessage = () => {
         if (!entry.messageJumpUrl) return;
@@ -125,211 +288,111 @@ function JoinModal({ entry: initialEntry, modalProps }: {
             NavigationRouter.transitionTo(new URL(entry.messageJumpUrl).pathname);
             closeAllModals();
         } catch {
-            showToast("Failed to navigate to message.", Toasts.Type.FAILURE);
+            showToast("Failed to navigate to message.", "failure");
         }
     };
 
-    const isBiomeEntry = entry.tags.some(t => t.startsWith("biome-"));
-    const [overridesOpen, setOverridesOpen] = React.useState(false);
-
-    const markBiome = (verdict: "real" | "bait") => {
-        const newTag: SnipeTag = verdict === "real" ? "biome-verified-real" : "biome-verified-bait";
-        const newTags = [...entry.tags.filter(t => !BIOME_VERDICT_TAGS.includes(t)), newTag];
-        SnipeStore.update(entry.id, { tags: newTags }, { replaceTags: true });
-    };
-
     const joinServer = () => {
-        if (!entry.joinUri) return showToast("No join link detected.", Toasts.Type.FAILURE);
+        if (!entry.joinUri) return showToast("No join link detected.", "failure");
         try {
             joinUri(entry.joinUri);
             closeAllModals();
         } catch {
-            showToast("Failed to join server.", Toasts.Type.FAILURE);
+            showToast("Failed to join server.", "failure");
         }
+    };
+
+    const copyLog = () => {
+        copyToClipboard(logToText(entry.log));
+        showToast("Log copied!", "success");
     };
 
     return (
         <ModalRoot {...modalProps}>
             <ModalHeader separator>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-                    <FallbackImage src={entry.iconUrl} style={{ width: 28, height: 28, borderRadius: 6 }} />
-                    <Heading tag="h5" style={{ flex: 1 }}>{entry.triggerName}</Heading>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+                    <FallbackImage src={entry.iconUrl} style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 17, fontWeight: 700, color: COLORS.text }}>{entry.triggerName}</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 999, color: status.color, background: `color-mix(in srgb, ${status.color} 14%, transparent)` }}>
+                                {status.label}
+                            </span>
+                        </div>
+                        <div style={{ fontSize: 12.5, color: COLORS.muted, marginTop: 2 }}>
+                            {timeAgo(entry.timestamp)} · <Hidden anonymize={anonymizeEverything}>{new Date(entry.timestamp).toLocaleString()}</Hidden>
+                        </div>
+                    </div>
                     <ModalCloseButton onClick={modalProps.onClose} />
                 </div>
             </ModalHeader>
-            <Divider style={{ margin: "8px 0" }} />
+
             <ModalContent>
-                <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "12px 0" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 0 16px" }}>
+                    <p style={{ ...sectionTitle, margin: 0 }}>Timing</p>
+                    <Timing entry={entry} />
 
-                    <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <Heading tag="h5">Status</Heading>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            {entry.tags.map(t => <TagBadge key={t} tag={t} />)}
-                        </div>
-                        {isBiomeEntry && (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                <button
-                                    onClick={() => setOverridesOpen(v => !v)}
-                                    style={{
-                                        display: "flex", alignItems: "center", gap: 8,
-                                        background: "none", border: "none",
-                                        padding: "4px 0", cursor: "pointer", textAlign: "left",
-                                    }}
-                                >
-                                    <span style={{
-                                        color: "var(--text-muted)", fontSize: 10,
-                                        display: "inline-block", lineHeight: 1,
-                                        transition: "transform 0.15s",
-                                        transform: overridesOpen ? "rotate(90deg)" : "rotate(0deg)",
-                                    }}>▶</span>
-                                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-muted)" }}>
-                                        Overrides
-                                    </span>
-                                </button>
-                                {overridesOpen && (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                        <div style={{
-                                            display: "flex", flexDirection: "column", gap: 8,
-                                            padding: "10px 12px", borderRadius: 6,
-                                            background: "var(--background-mod-subtle)",
-                                        }}>
-                                            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Biome tag</span>
-                                            <div style={{ display: "flex", gap: 6 }}>
-                                                <Button size="small" variant="positive" onClick={() => markBiome("real")} style={{ flex: 1 }}>Biome was real</Button>
-                                                <Button size="small" variant="dangerPrimary" onClick={() => markBiome("bait")} style={{ flex: 1 }}>Biome was fake</Button>
-                                            </div>
-                                        </div>
-                                    </div>
+                    {isBiomeEntry && <BiomeVerdict entry={entry} />}
+
+                    <p style={sectionTitle}>Details</p>
+                    <Details entry={entry} anonymize={anonymizeEverything} />
+
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 12 }}>
+                        <span style={{ ...sectionTitle, margin: 0 }}>What happened</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <ViewSwitch view={view} onChange={setView} />
+                            <Tooltip text="Copy the full log">
+                                {props => (
+                                    <button
+                                        {...props}
+                                        type="button"
+                                        onClick={copyLog}
+                                        aria-label="Copy the full log"
+                                        className="vc-sora-history-iconbtn"
+                                    >
+                                        <CopyIcon width={14} height={14} />
+                                    </button>
                                 )}
-                            </div>
-                        )}
-                    </section>
-
-                    <Divider />
-
-                    <section>
-                        <Heading tag="h5" style={{ marginBottom: 8 }}>Details</Heading>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <DetailRow label="Snipe ID" value={`${entry.id}`} />
-                            <DetailRow label="Trigger" value={`${entry.triggerName}`} />
-                            <DetailRow label="Priority" value={`${entry.triggerPriority}`} />
-                            <DetailRow label="Type" value={entry.triggerType} />
-                            {entry.biomeDurationMs && (
-                                <DetailRow label="Biome duration" value={formatElapsedTime(entry.biomeDurationMs)} />
-                            )}
-                            <DetailRow label="Time" value={
-                                anonymizeEverything
-                                    ? <Spoiler><span>{formatTimeAgo(entry.timestamp)} ⬝ {new Date(entry.timestamp).toLocaleString()}</span></Spoiler>
-                                    : `${formatTimeAgo(entry.timestamp)} ⬝ ${new Date(entry.timestamp).toLocaleString()}`
-                            } />
-
-                            {entry.channelName && (
-                                <DetailRow label="Channel" value={
-                                    anonymizeEverything
-                                        ? <Spoiler><span>{`#${entry.channelName}${entry.guildName ? ` ⬝ ${entry.guildName}` : ""}`}</span></Spoiler>
-                                        : `#${entry.channelName}${entry.guildName ? ` ⬝ ${entry.guildName}` : ""}`
-                                } />
-                            )}
-
-                            {entry.authorName && (
-                                <DetailRow label="Posted by" value={
-                                    anonymizeEverything
-                                        ? <Spoiler style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                            <FallbackImage src={entry.authorAvatarUrl} style={{ width: 16, height: 16, borderRadius: "50%" }} />
-                                            <span>{entry.authorName}</span>
-                                        </Spoiler>
-                                        : <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                            <FallbackImage src={entry.authorAvatarUrl} style={{ width: 16, height: 16, borderRadius: "50%" }} />
-                                            {entry.authorName}
-                                        </span>
-                                } />
-                            )}
+                            </Tooltip>
                         </div>
-                    </section>
-
-                    {entry?.processedMessageText && <>
-                        <Divider />
-                        <section>
-                            <Heading tag="h5" style={{ marginBottom: 8 }}>User message (cleaned)</Heading>
-                            {anonymizeEverything
-                                ? <Spoiler
-                                    style={{ display: "block", width: "100%" }}
-                                    placeholder={<MessageTextarea value="█████ ████ ██ ███████ ████" />}
-                                >
-                                    <MessageTextarea value={entry.processedMessageText} />
-                                </Spoiler>
-                                : <MessageTextarea value={entry.processedMessageText} />
-                            }
-                        </section>
-                    </>}
-
-                    {entry.metrics && <>
-                        <Divider />
-                        <section>
-                            <Heading tag="h5" style={{ marginBottom: 8 }}>Performance</Heading>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                <DetailRow label="Total processing time" value={`${entry.metrics.timeToJoinMs.toFixed(1)} ms`} />
-                                {/* <DetailRow label="Launch Roblox" value={`${entry.metrics.joinDurationMs.toFixed(1)} ms`} /> */}
-                                <DetailRow label="Plugin overhead" value={`${entry.metrics.overheadMs.toFixed(1)} ms`} />
-                                <DetailRow label="Roblox launch" value={`${entry.metrics.openUriDurationMs.toFixed(1)} ms`} />
-                                {entry.metrics.killDurationMs !== null && (
-                                    <>
-                                        <DetailRow label="Process kill" value={`${entry.metrics.killDurationMs.toFixed(1)} ms`} />
-                                    </>
-                                )}
-                            </div>
-                        </section>
-                    </>}
-
-                    {entry.log && entry.log.length > 0 && <>
-                        <Divider />
-                        <section>
-                            <Heading tag="h5" style={{ marginBottom: 8 }}>Log</Heading>
-                            {anonymizeEverything
-                                ? <Spoiler
-                                    style={{ display: "block", width: "100%" }}
-                                    placeholder={<MessageTextarea value="███ ███████ ██ ██ █ ███████ █ █████" />}
-                                >
-                                    <SnipeLog entries={entry.log} />
-                                </Spoiler>
-                                : <SnipeLog entries={entry.log} />
-                            }
-                        </section>
-                    </>}
+                    </div>
+                    {view === "timeline"
+                        ? <Story entry={entry} anonymize={anonymizeEverything} />
+                        : <RawLog log={entry.log} anonymize={anonymizeEverything} />}
                 </div>
             </ModalContent>
 
             <ModalFooter>
-                <div style={{ display: "flex", gap: 8, width: "100%", flexWrap: "wrap" }}>
-                    {entry.joinUri && (
-                        <Button variant="positive" size="small" onClick={joinServer}>Join</Button>
-                    )}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
+                    <Tooltip text="Remove from history">
+                        {props => (
+                            <Button
+                                {...props}
+                                size="small"
+                                variant="dangerSecondary"
+                                aria-label="Remove from history"
+                                onClick={() => { SnipeStore.delete(entry.id); modalProps.onClose(); }}
+                            >
+                                <DeleteIcon width={16} height={16} />
+                            </Button>
+                        )}
+                    </Tooltip>
+                    <span style={{ flex: 1 }} />
+                    {entry.messageJumpUrl && <Button size="small" variant="secondary" onClick={jumpToMessage}>Go to message</Button>}
                     {entry.link && (
-                        <Button variant="primary" size="small" onClick={() => {
-                            copyToClipboard(entry.link!);
-                            showToast("Copied!", Toasts.Type.SUCCESS);
-                        }}>
+                        <Button size="small" variant="secondary" onClick={() => { copyToClipboard(entry.link!); showToast("Copied!", "success"); }}>
                             Copy link
                         </Button>
                     )}
-                    {entry.messageJumpUrl && (
-                        <Button variant="link" size="small" onClick={jumpToMessage}>Go to message</Button>
-                    )}
-                    <Button
-                        size="small"
-                        variant="dangerPrimary"
-                        onClick={() => { SnipeStore.delete(entry.id); modalProps.onClose(); }}
-                        style={{ marginLeft: "auto" }}
-                    >
-                        Delete
-                    </Button>
+                    {entry.joinUri && <Button size="small" variant="primary" onClick={joinServer}>Join</Button>}
                 </div>
             </ModalFooter>
         </ModalRoot>
     );
 }
-// ─── Entrypoint ───────────────────────────────────────────────────────────────
 
-export function openJoinModal(entry: SnipeEntry, onCloseAll?: () => void): void {
+// --- Entrypoint ---
+
+export function openJoinModal(entry: SnipeEntry): void {
     openModal(p => <JoinModal entry={entry} modalProps={p} />);
 }

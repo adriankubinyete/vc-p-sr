@@ -1,11 +1,11 @@
-/* ─── EditableActionButton ────────────────────────────────────────────────── */
+/* --- EditableActionButton --- */
 
 .vc-sora-eab-wrapper {
     position: relative;
     display: inline-flex;
 }
 
-/* ─── Indicator dot ───────────────────────────────────────────────────────── */
+/* --- Indicator dot --- */
 
 .vc-sora-eab-indicator {
     position: absolute;
@@ -28,7 +28,7 @@
     opacity: 1;
 }
 
-/* ─── Modal: content area ─────────────────────────────────────────────────── */
+/* --- Modal: content area --- */
 
 .vc-sora-eab-modal-content {
     padding: 16px 0 8px;
@@ -44,7 +44,7 @@
     line-height: 1.4;
 }
 
-/* ─── Modal: field group ──────────────────────────────────────────────────── */
+/* --- Modal: field group --- */
 
 .vc-sora-eab-field {
     display: flex;
@@ -60,7 +60,7 @@
     color: var(--header-secondary);
 }
 
-/* ─── Modal: divider ──────────────────────────────────────────────────────── */
+/* --- Modal: divider --- */
 
 .vc-sora-eab-divider {
     height: 1px;
@@ -68,7 +68,7 @@
     margin: 2px 0;
 }
 
-/* ─── Modal: footer ───────────────────────────────────────────────────────── */
+/* --- Modal: footer --- */
 
 .vc-sora-eab-modal-footer {
     display: flex;
@@ -76,7 +76,7 @@
     justify-content: flex-end;
 }
 
-/* ─── Preview row ─────────────────────────────────────────────────────────── */
+/* --- Preview row --- */
 
 .vc-sora-eab-preview {
     display: flex;

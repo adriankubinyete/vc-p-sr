@@ -24,10 +24,10 @@ export type PillVariant =
 
 export type PillSize = "xs" | "small" | "medium" | "min";
 
-/** none = sem borda | subtle = borda com 30% opacidade | strong = borda sólida */
+/** none = no border | subtle = 30% opacity | strong = solid */
 export type PillBorder = "none" | "subtle" | "strong";
 
-/** rounded = pill (9999px) | sharp = cantos levemente arredondados */
+/** full = pill shape, smaller values round the corners less */
 export type PillRadius = "full" | "lg" | "md" | "sm" | "xs" | "none";
 
 export interface PillProps {
@@ -35,7 +35,7 @@ export interface PillProps {
     size?: PillSize;
     border?: PillBorder;
     radius?: PillRadius;
-    /** Emoji exibido antes do children. Em iconOnly, é o único conteúdo visível. */
+    /** Shown before the children. With iconOnly, it is the only content. */
     emoji?: string;
     children?: React.ReactNode;
     style?: React.CSSProperties;

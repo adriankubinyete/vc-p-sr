@@ -16,13 +16,14 @@
  * GNU Affero General Public License version 3 (AGPL-3.0).
  */
 
-import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
+
+import { Logger } from "../logger";
 
 const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("../native")>;
 const logger = new Logger("SolRadar.BiomeDetector");
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 export interface BiomeSnapshot {
     username: string;
@@ -71,7 +72,7 @@ function _parseBiomeFromRpc(rpcLine: string): string | null {
     }
 }
 
-// ─── BiomeDetectorService ─────────────────────────────────────────────────────
+// --- BiomeDetectorService ---
 
 class BiomeDetectorService {
     private _running = false;
@@ -79,7 +80,7 @@ class BiomeDetectorService {
     private _accounts: Map<string, AccountState> = new Map();
     private _listeners: { [K in keyof BiomeEventMap]?: Set<BiomeListener<K>>; } = {};
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    // --- Lifecycle ---
 
     async configure(usernames: string[]): Promise<void> {
         if (!usernames.length) return;
@@ -123,7 +124,7 @@ class BiomeDetectorService {
         logger.info("Detection loop stopped.");
     }
 
-    // ── Events ────────────────────────────────────────────────────────────────
+    // --- Events ---
 
     on<K extends keyof BiomeEventMap>(event: K, listener: BiomeListener<K>): () => void {
         if (!this._listeners[event]) {
@@ -143,7 +144,7 @@ class BiomeDetectorService {
         });
     }
 
-    // ── Queries ───────────────────────────────────────────────────────────────
+    // --- Queries ---
 
     getBiome(username: string): BiomeSnapshot | null {
         const state = this._findByUsername(username);
@@ -168,7 +169,7 @@ class BiomeDetectorService {
         return false;
     }
 
-    // ── Internal tick ─────────────────────────────────────────────────────────
+    // --- Internal tick ---
 
     private async _tick(): Promise<void> {
         if (!this._running || !this._accounts.size) return;
@@ -220,7 +221,7 @@ class BiomeDetectorService {
         if (effectiveDisconnected) {
             if (state.lastKnownBiome !== undefined) {
                 const from = state.lastKnownBiome;
-                logger.info(`${state.username} disconnected — clearing biome.`);
+                logger.info(`${state.username} disconnected, clearing biome.`);
                 state.lastKnownBiome = undefined;
                 state.lastBiomeUpdatedAt = Date.now();
                 this._emit("biomeCleared", { username: state.username, from });
@@ -250,7 +251,7 @@ class BiomeDetectorService {
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // --- Helpers ---
 
     private _findByUsername(username: string): AccountState | undefined {
         for (const state of this._accounts.values()) {

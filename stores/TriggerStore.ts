@@ -7,12 +7,13 @@
 /* eslint-disable @stylistic/no-multi-spaces */
 
 import { DataStore } from "@api/index";
-import { Logger } from "@utils/Logger";
 import { React } from "@webpack/common";
+
+import { Logger } from "../logger";
 
 const logger = new Logger("SolRadar");
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 export type TriggerType = "RARE_BIOME" | "EVENT_BIOME" | "BIOME" | "WEATHER" | "MERCHANT" | "CUSTOM";
 
@@ -23,15 +24,11 @@ export interface TriggerState {
     joinlock: boolean;
     joinlockDuration: number; // seconds
     /**
-     * Prioridade do trigger (1 = mais alta, números maiores = menos importante).
-     * O join lock bloqueia novos joins, EXCETO de triggers com prioridade
-     * MENOR que o trigger que ativou o lock.
-     *
-     * Exemplo: lock ativado por prioridade 3 → triggers 1 e 2 ainda passam,
-     * triggers 4+ são bloqueados.
+     * 1 is the highest. While a join lock is active, only triggers with a lower number than
+     * the one that set it can still join. A lock from priority 3 lets 1 and 2 through.
      */
     priority: number;
-    notificationSound?: string; // data URI ("data:audio/mp3;base64,...")
+    notificationSound?: string; // data URI
     notificationSoundVolume?: number; // 0-100, default 100
 }
 
@@ -45,18 +42,19 @@ export interface TriggerConditions {
         match: KeywordSet;
         exclude: KeywordSet;
     };
-    mentionRoles: { id: string; label: string; }[]; // for servers which only pings role instead of saying what biome it is
+    mentionRoles: { id: string; label: string; }[]; // for servers that only ping a role instead of naming the biome
     fromUser: string[]; // empty = ignore check
     inChannel: string[]; // empty = ignore check
-    ignoredChannels: string[]; // trigger-level ignored channels
-    ignoredGuilds: string[]; // trigger-level ignored guilds
-    bypassMatchAmbiguity: boolean; // bypass the "multiple matches" check
-    bypassMonitoredOnly: boolean; // bypass the "only in monitored channels" check
-    bypassIgnoredGuilds: boolean; // bypass the global "ignore this guild" check
-    bypassForwardIgnoredGuilds: boolean; // bypass the global "ignore this guild" check for forwarding
-    bypassIgnoredChannels: boolean; // bypass the global "ignore this channel" check
-    bypassLinkVerification: boolean; // bypass the Place ID check
-    bypassLinkDeduplication: boolean; // bypass the duplicate link check
+    ignoredChannels: string[];
+    ignoredGuilds: string[];
+    // Each bypass skips one global check for this trigger
+    bypassMatchAmbiguity: boolean; // several triggers matched
+    bypassMonitoredOnly: boolean; // monitored servers/channels
+    bypassIgnoredGuilds: boolean; // ignored servers
+    bypassForwardIgnoredGuilds: boolean; // no-forward servers
+    bypassIgnoredChannels: boolean; // ignored channels
+    bypassLinkVerification: boolean; // allowed place IDs
+    bypassLinkDeduplication: boolean; // repeated links
 }
 
 export interface TriggerBiome {
@@ -92,7 +90,7 @@ export interface Trigger {
     biome?: TriggerBiome;
 }
 
-// ─── Defaults ─────────────────────────────────────────────────────────────────
+// --- Defaults ---
 
 const DATASTORE_KEY = "SolsRadar_Triggers";
 
@@ -166,9 +164,8 @@ export function makeDefaultTrigger(type: TriggerType = "BIOME"): Omit<Trigger, "
     return base;
 }
 
-// ─── Migração suave ───────────────────────────────────────────────────────────
-// Chamada em cada trigger ao carregar do DataStore.
-// Campos novos recebem defaults se ausentes — dados antigos são preservados.
+// --- Migration ---
+// Runs on every stored trigger. Missing fields get defaults, existing data is kept.
 
 function migrateTrigger(raw: any): Trigger {
     return {
@@ -227,7 +224,7 @@ function migrateTrigger(raw: any): Trigger {
     };
 }
 
-// ─── Store interno ────────────────────────────────────────────────────────────
+// --- Internal store ---
 
 let _triggers: Trigger[] = [];
 const _listeners = new Set<() => void>();
@@ -236,24 +233,17 @@ function notifyListeners(): void {
     _listeners.forEach(fn => fn());
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-// Uma única Promise é criada no carregamento do módulo.
-// Qualquer código que precise dos triggers deve fazer `await triggerStoreReady`.
-// Chamadas a addTrigger / updateTrigger / etc. também awaitsam antes de mutarem.
+// --- Init ---
 
 let _resolveReady!: () => void;
 
-/**
- * Resolved when the initial IDB load (+ migration) is complete.
- * Await this before reading triggers outside React hooks.
- */
+/** Resolves once triggers are loaded. Await it before using triggers outside React hooks. */
 export const triggerStoreReady: Promise<void> = new Promise(res => {
     _resolveReady = res;
 });
 
-// ─── Persistência com fila ────────────────────────────────────────────────────
-// Writes são serializados: o próximo só começa quando o anterior termina.
-// Isso evita que dois DataStore.set concorrentes se sobrescrevam fora de ordem.
+// --- Queued persistence ---
+// Writes run one at a time so they can't finish out of order.
 
 let _writeQueue: Promise<void> = Promise.resolve();
 
@@ -267,7 +257,7 @@ function persist(): void {
     });
 }
 
-// ─── Leitura ──────────────────────────────────────────────────────────────────
+// --- Reading ---
 
 export function getTriggers(): Trigger[] {
     return _triggers;
@@ -289,9 +279,8 @@ export function getTriggersWithOnDetectionForwarding(): Trigger[] {
     return _triggers.filter(t => t.state.enabled && t.forwarding.onDetection.enabled);
 }
 
-// ─── CRUD ─────────────────────────────────────────────────────────────────────
-// Todas as mutações aguardam triggerStoreReady para garantir que o init
-// terminou antes de qualquer escrita.
+// --- CRUD ---
+// Every mutation waits for triggerStoreReady first.
 
 export async function addTrigger(data: Omit<Trigger, "id">): Promise<Trigger> {
     await triggerStoreReady;
@@ -351,17 +340,17 @@ export async function duplicateTrigger(id: string): Promise<Trigger | undefined>
     return copy;
 }
 
-// ─── Export / Import ──────────────────────────────────────────────────────────
+// --- Export / Import ---
 
 export type RedactField =
-    | "enabled"             // desativa o trigger
-    | "webhookUrl"          // zera forwarding.webhookUrl
-    | "webhookForwarding"   // desativa onMatch/onDetection
-    | "webhookPersonal"     // limpa webhookContent, webhookEmbedDescription, excludedGuilds, excludedChannels
-    | "notificationSound"   // remove o data URI do state
-    | "customTriggers"      // remove triggers do tipo CUSTOM inteiro
-    | "conditions"          // zera IDs pessoais: fromUser, inChannel, ignoredChannels, ignoredGuilds, mentionRoles
-    | "bypasses";           // reseta todos os flags de bypass para false
+    | "enabled"             // disables the trigger
+    | "webhookUrl"          // clears forwarding.webhookUrl
+    | "webhookForwarding"   // disables onMatch/onDetection
+    | "webhookPersonal"     // clears webhook content, embed description, excluded guilds/channels
+    | "notificationSound"   // removes the sound data URI
+    | "customTriggers"      // drops CUSTOM triggers entirely
+    | "conditions"          // clears personal IDs: fromUser, inChannel, ignored lists, mentionRoles
+    | "bypasses";           // resets every bypass to false
 
 export type ExportOptions = {
     redact?: RedactField[];
@@ -500,13 +489,13 @@ export async function importTriggersFromJson(json: string, mode: "merge" | "repl
     return { ok: true, imported: incoming.length };
 }
 
-// ─── Hook React ───────────────────────────────────────────────────────────────
+// --- React hook ---
 
 export function useTriggers(): Trigger[] {
     const [triggers, setTriggers] = React.useState<Trigger[]>(_triggers);
 
     React.useEffect(() => {
-        // Sync inicial: garante que o estado reflete o IDB após o init async
+        // Triggers may finish loading after the first render
         triggerStoreReady.then(() => setTriggers([..._triggers]));
 
         const update = () => setTriggers([..._triggers]);
@@ -517,7 +506,7 @@ export function useTriggers(): Trigger[] {
     return triggers;
 }
 
-// Executa imediatamente ao importar o módulo — não há segunda chamada.
+// Loads triggers once, when the module is imported
 (async () => {
     logger.info("Initializing TriggerStore…");
 
@@ -528,7 +517,7 @@ export function useTriggers(): Trigger[] {
         if (Array.isArray(stored) && stored.length > 0) {
             _triggers = stored.map(migrateTrigger);
             logger.info(`Loaded and migrated ${_triggers.length} triggers.`);
-            // Persiste versão migrada imediatamente (novos campos preenchidos).
+            // Save right away so migrated fields are stored
             await DataStore.set(DATASTORE_KEY, _triggers);
         } else {
             _triggers = [];

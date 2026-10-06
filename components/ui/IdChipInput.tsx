@@ -9,7 +9,7 @@ import "./IdChipInput.css";
 import { Button } from "@components/Button";
 import { ChannelStore, GuildStore, React, TextInput, UserStore, useState } from "@webpack/common";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 export type ChipKind = "user" | "channel" | "guild";
 
@@ -23,7 +23,7 @@ type ResolveState =
     | { status: "resolved"; entry: ResolvedEntry; }
     | { status: "error"; message: string; };
 
-// ─── Resolver ─────────────────────────────────────────────────────────────────
+// --- Resolver ---
 
 export function resolveId(id: string, kind: ChipKind): ResolvedEntry | null {
     try {
@@ -64,7 +64,7 @@ export function resolveId(id: string, kind: ChipKind): ResolvedEntry | null {
     } catch { return null; }
 }
 
-// ─── IdChipInput ──────────────────────────────────────────────────────────────
+// --- IdChipInput ---
 
 export function IdChipInput({ kind, label, hint, ids, onChange }: {
     kind: ChipKind;

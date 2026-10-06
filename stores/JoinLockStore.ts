@@ -6,34 +6,34 @@
 
 import { React } from "@webpack/common";
 
-// @TODO: this is not a store. move to services
+// TODO: this is not really a store, move it to services/
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 export interface JoinLock {
-    /** Prioridade do trigger que ativou o lock (número menor = mais importante). */
+    /** Priority of the trigger that set the lock. Lower number = more important. */
     priority: number;
-    /** Timestamp (ms) em que o lock expira. */
+    /** When the lock expires (ms timestamp). */
     lockedUntil: number;
-    /** Nome do trigger que ativou, apenas para exibição. */
+    /** For display only. */
     triggerName: string;
-    /** Duração original configurada (segundos), apenas para exibição. */
+    /** For display only. */
     durationSeconds: number;
 }
 
 type Listener = (lock: JoinLock | null) => void;
 
-// ─── Store ────────────────────────────────────────────────────────────────────
+// --- Store ---
 
 class JoinLockManager {
     private _lock: JoinLock | null = null;
     private _timer: ReturnType<typeof setTimeout> | null = null;
     private _listeners = new Set<Listener>();
 
-    // ── Leitura ──────────────────────────────────────────────────────────────
+    // --- Reading ---
 
     get current(): JoinLock | null {
-        // Limpa expirados lazily ao ler
+        // Expired locks are cleared lazily on read
         if (this._lock && Date.now() >= this._lock.lockedUntil) {
             this._clearInternal();
         }
@@ -44,14 +44,10 @@ class JoinLockManager {
         return this.current !== null;
     }
 
-    /**
-     * Retorna true se o trigger com a prioridade dada está bloqueado pelo lock atual.
-     * Prioridade menor = mais importante → passa pelo lock.
-     */
+    /** A trigger passes the lock only if it is more important (lower number) than the one that set it. */
     isBlocked(triggerPriority: number): boolean {
         const lock = this.current;
         if (!lock) return false;
-        // Bloqueado apenas se o trigger é MENOS importante (número maior)
         return triggerPriority >= lock.priority;
     }
 
@@ -60,17 +56,11 @@ class JoinLockManager {
         return Math.max(0, this._lock.lockedUntil - Date.now());
     }
 
-    // ── Mutações ─────────────────────────────────────────────────────────────
+    // --- Mutations ---
 
-    /**
-     * Ativa ou substitui o lock.
-     * Só substitui se o novo trigger for mais importante (prioridade menor).
-     * Retorna true se o lock foi ativado/atualizado.
-     */
+    /** Sets the lock, or replaces it if the new trigger is more important. Returns whether it changed. */
     activate(priority: number, durationSeconds: number, triggerName: string): boolean {
         const existing = this.current;
-
-        // Só substitui se o novo for mais importante ou não há lock
         if (existing && priority >= existing.priority) return false;
 
         this._setLock({
@@ -82,16 +72,14 @@ class JoinLockManager {
         return true;
     }
 
-    /**
-     * Remove o lock imediatamente (força manual ou join invalidado).
-     */
+    /** Removes the lock right away (manual release or invalid join). */
     release(): void {
         if (!this._lock) return;
         this._clearInternal();
         this._notify();
     }
 
-    // ── Internos ─────────────────────────────────────────────────────────────
+    // --- Internals ---
 
     private _setLock(lock: JoinLock): void {
         if (this._timer !== null) clearTimeout(this._timer);
@@ -111,7 +99,7 @@ class JoinLockManager {
         this._lock = null;
     }
 
-    // ── Observers ────────────────────────────────────────────────────────────
+    // --- Observers ---
 
     subscribe(listener: Listener): () => void {
         this._listeners.add(listener);
@@ -128,14 +116,13 @@ class JoinLockManager {
 
 export const JoinLockStore = new JoinLockManager();
 
-// ─── Hook React ───────────────────────────────────────────────────────────────
+// --- React hook ---
 
-/** Hook que reage a mudanças no join lock. */
 export function useJoinLock(): JoinLock | null {
     const [lock, setLock] = React.useState<JoinLock | null>(JoinLockStore.current);
 
     React.useEffect(() => {
-        // Atualiza imediatamente ao montar (pode ter expirado entre renders)
+        // The lock may have expired since the first render
         setLock(JoinLockStore.current);
         return JoinLockStore.subscribe(setLock);
     }, []);

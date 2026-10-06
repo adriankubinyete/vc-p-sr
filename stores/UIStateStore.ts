@@ -10,17 +10,15 @@ import { SnipeTag } from "../types";
 
 const STORAGE_KEY = "vc-sora-ui-state";
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 export type ModalTab = "recentJoins" | "triggers" | "settings" | "about" | "dev" | "stats" | "utilities" | "updates" | "testtab2" | "testtab3";
 export type TriggerFilter = "all" | "RARE_BIOME" | "EVENT_BIOME" | "BIOME" | "WEATHER" | "MERCHANT" | "CUSTOM";
 export type JoinFilter = SnipeTag | "all";
 
-/** Dados persistidos de um EditableActionButton. */
+/** User overrides for an EditableActionButton. Undefined means the button's default. */
 export interface EabData {
-    /** Label customizado pelo usuário (undefined = usa o defaultLabel do componente) */
     label?: string;
-    /** Valor customizado pelo usuário (undefined = usa o defaultValue do componente) */
     value?: string;
 }
 
@@ -28,31 +26,33 @@ interface UIState {
     activeTab: ModalTab;
     triggers: { typeFilter: TriggerFilter; search: string; };
     recentJoins: { tagFilter: JoinFilter; search: string; };
-    /** Dados persistidos dos EditableActionButtons, indexados por id. */
+    /** Keyed by button id. */
     eabValues: Record<string, EabData>;
+    /** Which Settings blocks are open, keyed by block id. Missing means the block's default. */
+    settingsBlocks: Record<string, boolean>;
 }
 
-// ─── Defaults ─────────────────────────────────────────────────────────────────
+// --- Defaults ---
 
 const DEFAULTS: UIState = {
     activeTab: "recentJoins",
     triggers: { typeFilter: "all", search: "" },
     recentJoins: { tagFilter: "all", search: "" },
     eabValues: {},
+    settingsBlocks: {},
 };
 
-// ─── Store ────────────────────────────────────────────────────────────────────
+// --- Store ---
 
 class UIStateStore {
     private _state: UIState = this._load();
 
-    /** Lê uma chave do estado. */
     get<K extends keyof UIState>(key: K): UIState[K] {
         return this._state[key];
     }
 
     /**
-     * Atualiza uma chave e persiste. Suporta patch parcial em objetos.
+     * Updates a key and saves. Object values are merged, so a partial patch works.
      *
      * @example
      * UIState.set("activeTab", "triggers");
@@ -71,31 +71,27 @@ class UIStateStore {
         this._save();
     }
 
-    // ─── EAB helpers ──────────────────────────────────────────────────────────
+    // --- EAB helpers ---
 
-    /** Retorna os dados persistidos de um EAB (label e value). */
     getEab(id: string): EabData {
         return this._state.eabValues[id] ?? {};
     }
 
     /**
-     * Faz patch parcial nos dados de um EAB e persiste.
-     * Passar undefined em um campo remove-o (volta ao default do componente).
+     * Merges a patch into a button's overrides and saves. Pass undefined to reset a field.
      *
      * @example
-     * UIState.setEab("my-btn", { value: "roblox://..." });
      * UIState.setEab("my-btn", { label: "Launch game" });
-     * UIState.setEab("my-btn", { value: undefined }); // reseta só o value
+     * UIState.setEab("my-btn", { value: undefined }); // resets only the value
      */
     setEab(id: string, patch: Partial<EabData>): void {
         const current = this._state.eabValues[id] ?? {};
         const next: EabData = { ...current, ...patch };
 
-        // Remove campos undefined para manter o objeto limpo
         if (next.label === undefined) delete next.label;
         if (next.value === undefined) delete next.value;
 
-        // Se ficou vazio, remove a entrada inteira
+        // Nothing left to override, drop the entry
         if (Object.keys(next).length === 0) {
             const { [id]: _, ...rest } = this._state.eabValues;
             this._state.eabValues = rest;
@@ -122,6 +118,7 @@ class UIStateStore {
                 triggers: { ...DEFAULTS.triggers, ...saved.triggers },
                 recentJoins: { ...DEFAULTS.recentJoins, ...saved.recentJoins },
                 eabValues: saved.eabValues ?? {},
+                settingsBlocks: saved.settingsBlocks ?? {},
             };
         } catch (e) {
             console.error("[UIStateStore] load failed, using defaults:", e);

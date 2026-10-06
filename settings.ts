@@ -18,16 +18,14 @@ export const ACTION_OPTIONS = [
     { label: "Prepare ADB", value: "prep-adb" },
 ] as const;
 
-// utilitary function to construct the action map with an specific selected default value
+// ACTION_OPTIONS with `default` set on the given value
 const actionOptions = (defaultValue: string) =>
     ACTION_OPTIONS.map(o => ({ ...o, default: o.value === defaultValue }));
 
-// Known macro tools and their hardcoded kill target(s).
-// To map a new one: add an entry here - key is the internal setting value,
-// "label" is what shows up in the "Macro Type" dropdown, "matchBy" picks how
-// "matchValue" (comma-separated) is matched: "name" for the process image name,
-// or "title" for the window title (needed for script-based macros, e.g. AutoHotkey,
-// where multiple unrelated scripts share the same interpreter process name).
+// Known macros and how to find their process.
+// key: setting value. label: shown in the dropdown. matchValue: comma-separated.
+// matchBy: "name" for the process name, "title" for the window title
+// (use "title" for script macros like AutoHotkey, where many scripts share one process).
 export const MACRO_PRESETS: Record<string, { label: string; matchBy: "name" | "title"; matchValue: string; }> = {
     maxstellar: { label: "Maxstellar", matchBy: "title", matchValue: "maxstellar's Biome Macro - Running" },
     fishsol: { label: "FishSol", matchBy: "title", matchValue: "FishSol*" },
@@ -55,12 +53,12 @@ export const settings = definePluginSettings({
         default: false,
     },
 
-    // main ui stuff
+    // UI
     pluginIconLocation: {
         type: OptionType.SELECT,
         description: "Where to place the menu button",
         options: [
-            { label: "Chat Bar (default)", value: "chatbar", default: true }, // this is the most stable place
+            { label: "Chat Bar (default)", value: "chatbar", default: true }, // most stable spot
             { label: "Title Bar", value: "titlebar" },
             { label: "Hidden (not recommended)", value: "hide" }
         ],
@@ -78,7 +76,7 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // main behavior
+    // Main behavior
     autoJoinEnabled: {
         type: OptionType.BOOLEAN,
         description: "Global auto-join state. Takes precedence over the trigger-specific setting.",
@@ -134,7 +132,7 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // specialized settings
+    // Message handling
     flattenEmbeds: {
         type: OptionType.BOOLEAN,
         description: "Whether to merge embeds into the message content when checking for triggers. If you're monitoring a Macro server, you might want to enable this.",
@@ -154,11 +152,9 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // advanced settings (users shouldnt generally mess with these, best keep as default)
+    // Advanced (best left at defaults)
     ignoreWebhookForwards: {
-        // @NOTE
-        // there is already forward-loop prevention for self-webhooks
-        // but with this enabled, we EXPLICITLY ignore ANY forwards from solradar, just in case.
+        // Extra safety on top of the existing self-forward loop protection
         type: OptionType.BOOLEAN,
         description: "With this enabled, if an embed footer contains the text 'solradar', it will be ignored. Only disable this if you know what you're doing!",
         default: true,
@@ -197,7 +193,7 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // adb emulator stuff
+    // ADB (emulator)
     ldpAdbPath: {
         type: OptionType.STRING,
         description: "Path to adb.exe (e.g. C:\\LDPlayer\\LDPlayer9\\adb.exe)",
@@ -217,7 +213,7 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // webhook stuff
+    // Webhooks
     globalWebhookUrl: {
         type: OptionType.STRING,
         description: "Fallback webhook URL used when a trigger has forwarding enabled but no webhook configured. Triggers with their own webhook URL will use that instead.",
@@ -237,7 +233,7 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // ui
+    // UI
     hideInactiveIndicator: {
         type: OptionType.BOOLEAN,
         description: "Whether to hide the red 'inactive' dot in menu button when joins are disabled.",
@@ -269,7 +265,7 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // monitoring
+    // Monitoring
     monitoredGuilds: {
         type: OptionType.STRING,
         description: "Comma-separated list of guild IDs that the plugin should monitor. If empty, all guilds will be monitored. Example: `123456789012345678, 987654321098765432`",
@@ -301,7 +297,7 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // link check
+    // Link verification
     linkVerification: {
         type: OptionType.SELECT,
         description: "When to verify links. Requires a robloxToken configured to work. If set to after, once a bad link is detected, the plugin will execute the onBadLink action.",
@@ -378,33 +374,33 @@ export const settings = definePluginSettings({
         hidden: true,
     },
 
-    // detector
+    // Biome detector (changes need a restart)
     detectorEnabled: {
         type: OptionType.BOOLEAN,
         description: "Enable biome detection. When active, the plugin reads your Roblox log files to verify whether the biome you joined actually matches what was announced. Requires at least one account configured below.",
         default: false,
-        restartNeeded: true, // i am NOT gonna hot-reload this
+        restartNeeded: true,
     },
     detectorAccounts: {
         type: OptionType.STRING,
         description: "Comma-separated list of Roblox usernames to monitor for biome detection. If empty, biome detection is disabled.",
         default: "",
-        restartNeeded: true, // i am NOT gonna hot-reload this
+        restartNeeded: true,
     },
     detectorTimeoutMs: {
         type: OptionType.NUMBER,
         description: "How long (in milliseconds) to wait for a biome to be detected after joining. If no biome is detected within this window, the join is marked as timed out and the join lock is released. Recommended: 30000",
         default: 30000,
-        restartNeeded: true, // i am NOT gonna hot-reload this
+        restartNeeded: true,
     },
     detectorIntervalMs: {
         type: OptionType.NUMBER,
         description: "How often (in milliseconds) the detector reads your Roblox log files. Lower values give faster detection but read the disk more frequently. Recommended: 5000. Advised to keep this above 1000 due to minimal returns.",
         default: 5000,
-        restartNeeded: true, // i am NOT gonna hot-reload this
+        restartNeeded: true,
     },
 
-    // internals
+    // Internal state
     lastVersionCheck: {
         type: OptionType.NUMBER,
         description: "[internal] The last time the plugin checked for updates.",

@@ -100,7 +100,7 @@ export function startBiomeDetection(snipe: Snipe): void {
             _watchForBiomeEnd(snipe);
             const joinMs = SnipeStore.getById(snipe.id)?.metrics?.timeToJoinMs;
             showNotification({
-                title: `✅ SoRa :: ${snipe.trigger.name} — biome confirmed`,
+                title: `✅ SoRa :: ${snipe.trigger.name}: biome confirmed`,
                 body: [
                     joinMs != null && `Join took ${formatElapsedTime(joinMs)}`,
                     `Detection took ${formatElapsedTime(elapsed)}`,
@@ -127,13 +127,13 @@ export function startBiomeDetection(snipe: Snipe): void {
                 scheduleCancelableAction({
                     action: settings.store.onBiomeFalse,
                     timeoutMs: settings.store.biomeFalseActionTimeout ?? 10_000,
-                    title: `${snipe.trigger.name} — fake biome`,
+                    title: `${snipe.trigger.name}: fake biome`,
                     description: `Got "${detected}" instead of "${expected}"`,
                     iconUrl: snipe.trigger.iconUrl,
                 });
             } else {
                 showNotification({
-                    title: `❌ SoRa :: ${snipe.trigger.name} — fake biome`,
+                    title: `❌ SoRa :: ${snipe.trigger.name}: fake biome`,
                     body: `Got "${detected}" instead of "${expected}" (${elapsed}ms)`,
                     icon: snipe.trigger.iconUrl,
                 });

@@ -6,29 +6,47 @@
 
 import { Button } from "@components/Button";
 import { PluginNative } from "@utils/types";
-import { React, TextInput, Tooltip } from "@webpack/common";
+import { React, TextInput } from "@webpack/common";
 
 import { settings } from "../../../settings";
+import { UIState } from "../../../stores/UIStateStore";
 import { getEffectiveKillTargets } from "../../../utils";
 import { ChipKind } from "../../ui/IdChipInput";
 import { Note } from "../../ui/Note";
-import { Setting } from "./Setting";
+import { Block, BlockMaster } from "./Block";
+import { DebugReport } from "./DebugReport";
+import { BlockId, Overview } from "./Overview";
+import { HelpTip, Setting } from "./Setting";
 
 const Native = VencordNative.pluginHelpers.SolRadar as PluginNative<typeof import("../../../native")>;
 
-// ─── Shared styles ────────────────────────────────────────────────────────────
+// --- Shared styles ---
 
-const sectionTitle: React.CSSProperties = {
-    color: "var(--text-muted)",
-    fontSize: 11,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
-    marginBottom: 4,
-    marginTop: 20,
+const customRow: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    padding: "10px 14px",
+    borderRadius: 8,
+    background: "var(--background-mod-subtle)",
 };
 
-// ─── Kill process check ───────────────────────────────────────────────────────
+const customLabel: React.CSSProperties = {
+    color: "var(--control-secondary-text-default)",
+    fontSize: 14,
+    fontWeight: 500,
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+};
+
+const customDescription: React.CSSProperties = {
+    color: "var(--text-muted)",
+    fontSize: 12,
+    lineHeight: 1.4,
+    marginTop: 2,
+};
+
+// --- Kill process check ---
 
 type ProcessCheckResult = { pattern: string; matches: { pid: number; name: string; }[]; };
 
@@ -60,13 +78,11 @@ function ProcessCheckResults({ results }: { results: ProcessCheckResult[]; }) {
     );
 }
 
-// Used when a hardcoded macro preset is selected - no editable field to merge the button into.
-function CheckProcessesButton() {
-    settings.use(["macroType"]);
+function useProcessCheck() {
     const [results, setResults] = React.useState<ProcessCheckResult[] | null>(null);
     const [checking, setChecking] = React.useState(false);
 
-    const handleCheck = async () => {
+    const check = async () => {
         setChecking(true);
         setResults(null);
         const { matchBy, values } = getEffectiveKillTargets();
@@ -74,20 +90,22 @@ function CheckProcessesButton() {
         setChecking(false);
     };
 
+    return { results, checking, check };
+}
+
+// Used when a known macro preset is selected - there is no editable field to put the button next to.
+function CheckProcessesButton() {
+    settings.use(["macroType"]);
+    const { results, checking, check } = useProcessCheck();
+
     return (
-        <div style={{
-            display: "flex",
-            flexDirection: "column",
-            padding: "10px 14px",
-            borderRadius: 8,
-            background: "var(--background-mod-subtle)",
-        }}>
+        <div style={customRow}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <Button size="medium" variant="secondary" onClick={handleCheck} disabled={checking}>
+                <Button size="medium" variant="secondary" onClick={check} disabled={checking}>
                     {checking ? "Checking…" : "Check processes"}
                 </Button>
                 <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
-                    Lists the actual running processes matched by this preset.
+                    Lists the running processes this preset matches.
                 </span>
             </div>
             {results && <ProcessCheckResults results={results} />}
@@ -95,12 +113,11 @@ function CheckProcessesButton() {
     );
 }
 
-// Used in Custom mode - merges the process name/window title input and the check button into one row.
+// Used in Custom mode - the process name / window title input and the check button share one row.
 function MacroProcessNameEntry() {
     const { killProcessNames, killMatchBy } = settings.use(["killProcessNames", "killMatchBy"]);
     const [raw, setRaw] = React.useState(killProcessNames ?? "");
-    const [results, setResults] = React.useState<ProcessCheckResult[] | null>(null);
-    const [checking, setChecking] = React.useState(false);
+    const { results, checking, check } = useProcessCheck();
 
     React.useEffect(() => setRaw(killProcessNames ?? ""), [killProcessNames]);
 
@@ -108,51 +125,19 @@ function MacroProcessNameEntry() {
 
     const isTitle = killMatchBy === "title";
 
-    const handleCheck = async () => {
-        setChecking(true);
-        setResults(null);
-        const { matchBy, values } = getEffectiveKillTargets();
-        setResults(await checkProcesses(matchBy, [...values]));
-        setChecking(false);
-    };
-
     return (
-        <div style={{
-            display: "flex",
-            flexDirection: "column",
-            padding: "10px 14px",
-            borderRadius: 8,
-            background: "var(--background-mod-subtle)",
-        }}>
-            <span style={{ color: "var(--control-secondary-text-default)", fontSize: 14, fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
-                {isTitle ? "Macro Window Title" : "Macro Process Name"}
-                <Tooltip text={isTitle
-                    ? "Window title(s) of the macro, comma-separated. Wildcards like FishSol* are supported and recommended - useful for script-based macros (e.g. AutoHotkey) that share a single interpreter process, where matching by process name would also kill unrelated scripts."
-                    : "To find out a process name, open Task Manager → \"Details\" tab and copy the value under \"Name\" for your macro's process."}
-                >
-                    {props => (
-                        <span {...props} style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: 15,
-                            height: 15,
-                            borderRadius: "50%",
-                            background: "var(--background-mod-strong)",
-                            color: "var(--text-muted)",
-                            fontSize: 10,
-                            fontWeight: 700,
-                            cursor: "help",
-                            flexShrink: 0,
-                            userSelect: "none",
-                        }}>?</span>
-                    )}
-                </Tooltip>
+        <div data-sora-setting="killProcessNames" style={customRow}>
+            <span style={customLabel}>
+                {isTitle ? "Macro window title" : "Macro process name"}
+                <HelpTip text={isTitle
+                    ? "Window titles accept wildcards like FishSol*. Good for script macros (AutoHotkey) that share one interpreter process, so other scripts are not closed too."
+                    : "Open Task Manager, go to the Details tab and copy the value under Name for your macro."}
+                />
             </span>
-            <span style={{ color: "var(--text-muted)", fontSize: 12, lineHeight: 1.4, marginTop: 2 }}>
+            <span style={customDescription}>
                 {isTitle
-                    ? "Type the window title(s) of the macro to terminate once a snipe happens. Comma-separated for multiple. Wildcards (*) are supported and recommended if the title includes a version number."
-                    : "Type what process names should be terminated once a snipe happens. You can provide multiple process names by separating each via comma. This is case-insensitive. File type is optional, but recommended."}
+                    ? "Window title of the macro. Separate several with commas. Wildcards (*) help when the title has a version number."
+                    : "Process name of the macro. Separate several with commas. Not case-sensitive. The file extension is optional but recommended."}
             </span>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
                 <TextInput
@@ -162,7 +147,7 @@ function MacroProcessNameEntry() {
                     onBlur={() => commit(raw)}
                     placeholder={isTitle ? "FishSol*" : "AutoHotkeyU64.exe, MacroTool.exe"}
                 />
-                <Button size="medium" variant="primary" onClick={handleCheck} disabled={checking}>
+                <Button size="medium" variant="primary" onClick={check} disabled={checking}>
                     {checking ? "Checking…" : "Check"}
                 </Button>
             </div>
@@ -171,9 +156,9 @@ function MacroProcessNameEntry() {
     );
 }
 
-// ─── ADB section ─────────────────────────────────────────────────────────────
+// --- ADB ---
 
-function AdbEntries() {
+function AdbSerialEntry() {
     const { ldpAdbDeviceSerial } = settings.use(["ldpAdbDeviceSerial"]);
     const [devicesOutput, setDevicesOutput] = React.useState<string | null>(null);
     const [checking, setChecking] = React.useState(false);
@@ -187,54 +172,40 @@ function AdbEntries() {
     };
 
     return (
-        <>
-            <Setting id="ldpAdbPath" label="ADB Path" description="Path to adb.exe." />
-            <div style={{
-                display: "flex",
-                flexDirection: "column",
-                padding: "10px 14px",
-                borderRadius: 8,
-                background: "var(--background-mod-subtle)",
-            }}>
-                <span style={{ color: "var(--control-secondary-text-default)", fontSize: 14, fontWeight: 500 }}>
-                    ADB Device Serial
-                </span>
-                <span style={{ color: "var(--text-muted)", fontSize: 12, lineHeight: 1.4, marginTop: 2 }}>
-                    Serial of the target device. Default: emulator-5554
-                </span>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-                    <TextInput
-                        style={{ flex: 1 }}
-                        value={ldpAdbDeviceSerial ?? ""}
-                        onChange={v => { settings.store.ldpAdbDeviceSerial = v; }}
-                        placeholder="emulator-5554"
-                    />
-                    <Button size="medium" variant="primary" onClick={handleCheck} disabled={checking}>
-                        {checking ? "Checking…" : "Check devices"}
-                    </Button>
-                </div>
-                {devicesOutput && (
-                    <pre style={{
-                        margin: "6px 0 0",
-                        padding: "8px 10px",
-                        background: "var(--background-mod-strong)",
-                        borderRadius: "var(--radius-sm, 4px)",
-                        color: "var(--text-default)",
-                        fontSize: 12,
-                        fontFamily: "var(--font-code)",
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-all",
-                    }}>
-                        {devicesOutput}
-                    </pre>
-                )}
+        <div data-sora-setting="ldpAdbDeviceSerial" style={customRow}>
+            <span style={customLabel}>Device serial</span>
+            <span style={customDescription}>Serial of the target device. Default: emulator-5554</span>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+                <TextInput
+                    style={{ flex: 1 }}
+                    value={ldpAdbDeviceSerial ?? ""}
+                    onChange={v => { settings.store.ldpAdbDeviceSerial = v; }}
+                    placeholder="emulator-5554"
+                />
+                <Button size="medium" variant="primary" onClick={handleCheck} disabled={checking}>
+                    {checking ? "Checking…" : "Check devices"}
+                </Button>
             </div>
-            <Setting id="ldpAdbPackageName" label="ADB Package Name" description="Package to force-stop on the device. Default: com.roblox.client" />
-        </>
+            {devicesOutput && (
+                <pre style={{
+                    margin: "6px 0 0",
+                    padding: "8px 10px",
+                    background: "var(--background-mod-strong)",
+                    borderRadius: "var(--radius-sm, 4px)",
+                    color: "var(--text-default)",
+                    fontSize: 12,
+                    fontFamily: "var(--font-code)",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-all",
+                }}>
+                    {devicesOutput}
+                </pre>
+            )}
+        </div>
     );
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 type SettingEntry = {
     id: keyof typeof settings.store;
@@ -242,286 +213,308 @@ type SettingEntry = {
     description?: string;
     tooltip?: string;
     chipKind?: ChipKind;
+    tech?: boolean;
 };
 
-type Section = {
+// Anything that is not a plain setting row (notes, check buttons). `search` is the text it matches against.
+type CustomEntry = {
+    key: string;
+    search: string;
+    node: React.ReactNode;
+};
+
+type Entry = SettingEntry | CustomEntry;
+
+type BlockDef = {
+    id: BlockId;
     title: string;
+    subtitle: string;
+    tooltip?: string;
+    tech?: boolean;
+    master?: BlockMaster;
+    keepBodyVisible?: boolean;
     note?: React.ReactNode;
-    entries: SettingEntry[];
-    CustomEntries?: React.FC;
-    after?: React.ReactNode;
+    entries: Entry[];
 };
 
-// ─── SettingsTab ──────────────────────────────────────────────────────────────
+const isCustom = (e: Entry): e is CustomEntry => "node" in e;
+
+const DEFAULT_OPEN: Record<BlockId, boolean> = {
+    join: true,
+    biome: true,
+    verification: true,
+    macro: true,
+    monitoring: false,
+    reading: false,
+    forwarding: false,
+    interface: false,
+    other: false,
+    adb: false,
+};
+
+const DELAY_DESCRIPTION = "Time to wait before acting. A cancel prompt shows during this delay.";
+
+// --- SettingsTab ---
 
 export function SettingsTab() {
     const {
         detectorEnabled,
         robloxToken,
         linkVerification,
+        onBadLink,
         onBiomeFalse,
         onBiomeEnd,
         onBiomeTimeout,
         sendAdbSignal,
         sendKillProcessSignal,
         macroType,
+        joinMode,
     } = settings.use([
         "detectorEnabled",
         "robloxToken",
         "linkVerification",
+        "onBadLink",
         "onBiomeFalse",
         "onBiomeEnd",
         "onBiomeTimeout",
         "sendAdbSignal",
         "sendKillProcessSignal",
         "macroType",
+        "joinMode",
     ]);
 
     const [search, setSearch] = React.useState("");
-    const [showAdvanced, setShowAdvanced] = React.useState(false);
+    const [openBlocks, setOpenBlocks] = React.useState<Record<BlockId, boolean>>(() => ({ ...DEFAULT_OPEN, ...UIState.get("settingsBlocks") }));
 
-    const hasToken = !!robloxToken;
     const verificationEnabled = linkVerification !== "disabled";
+    const anyBiomeAction = onBiomeFalse !== "nothing" || onBiomeEnd !== "nothing" || onBiomeTimeout !== "nothing";
+    // "Prepare ADB" actions use the ADB settings even when the close signal is off.
+    const adbUsedByAction = [onBadLink, onBiomeFalse, onBiomeEnd, onBiomeTimeout].includes("prep-adb");
 
-    // ── Simple sections ───────────────────────────────────────────────────────
+    const setOpen = (id: BlockId, open: boolean) => {
+        setOpenBlocks(prev => ({ ...prev, [id]: open }));
+        UIState.set("settingsBlocks", { [id]: open });
+    };
 
-    const simpleSections: Section[] = [
-        {
-            title: "General",
-            entries: [
-                { id: "autoJoinEnabled", label: "Auto-joins", description: "Allow triggers to auto-join servers. Disable to quickly pause all auto-joins without touching individual triggers." },
-                { id: "notificationEnabled", label: "Notifications", description: "Show a desktop notification when a trigger matches." },
-                { id: "privateServerLink", label: "Private Server Link", description: "Your private server link. Required for some actions." },
-            ],
+    // Turning a feature on also unfolds its block, so its options are right there.
+    const master = (id: BlockId, value: boolean, apply: (v: boolean) => void): BlockMaster => ({
+        value,
+        onChange: v => {
+            apply(v);
+            if (v) setOpen(id, true);
         },
+    });
+
+    const handleFix = (block: BlockId, setting: string) => {
+        setSearch("");
+        setOpen(block, true);
+        setTimeout(() => {
+            document.querySelector(`[data-sora-setting="${setting}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 50);
+    };
+
+    // --- Blocks ---
+
+    const blocks: BlockDef[] = [
         {
-            title: "User Interface",
+            id: "join",
+            title: "Join behavior",
+            subtitle: "How a snipe launches Roblox",
             entries: [
-                { id: "anonymizeEverything", label: "Anonymize Everything", description: "Hide every information that could lead to identifying the origin of your snipe. Recommended to keep this enabled if you're going to post screenshots of your snipes.", tooltip: "This will hide the author, server, channel, message and logs for each snipe in the history page. You may click to reveal each entry individually." },
-                { id: "shouldCheckForUpdates", label: "Check for Updates", description: "Check for new versions of SolRadar on startup.", tooltip: "This will check for new versions of SolRadar on startup and display a notification if one is available. Runs once per day." },
-                { id: "useButtonsForOrderingTriggers", label: "Use buttons for ordering triggers", description: "Reorder triggers with ▲▼ buttons instead of dragging them." },
-                { id: "useTriggerTabContextMenu", label: "Trigger tab context menu", description: "Right-click a trigger for quick actions (enable/disable, edit, duplicate, export, remove). Disable to go back to right-click instantly toggling enabled/disabled." },
-            ],
-        },
-        {
-            title: "Snipe Configuration",
-            entries: [
-                { id: "flattenEmbeds", label: "Interpret Embeds", description: "Include embed titles and descriptions when matching triggers. Useful for macro servers that post biomes inside embeds rather than plain text." },
-                { id: "interpretJoinguardLinks", label: "Interpret Joinguard Links", description: "Process links from Sol's Stat Tracker Joinguard. These open your browser for Cloudflare verification and cannot be place-verified." },
-                { id: "resolveAmbiguousLinks", label: "Force Match on Multiple Links", description: "When a message has more than one link type (e.g. a share link alongside a private server link), use the first one found. By default, messages with multiple link types are skipped as ambiguous." },
-                { id: "deduplicateLinks", label: "Deduplicate Links", description: "Ignore a link if the same one was seen in the last 10 minutes for the same trigger." },
-                { id: "joinMode", label: "Join Mode", description: "How to handle the running Roblox instance when a trigger fires." },
-                { id: "sendAdbSignal", label: "Send ADB Signal", description: "Send a close signal to the emulator via ADB after launching the join URI. Requires ADB configuration in Advanced." },
                 {
-                    id: "sendKillProcessSignal", label: "Send Macro Kill Signal",
-                    description: "Try to kill any running macro process immediately on snipe.",
-                    tooltip: "When enabled, once a biome is sniped, try to kill any process running with an specified name. This is so you don't report a fake biome to your macro server, if any.",
+                    id: "joinMode", label: "When Roblox is already open",
+                    description: "What happens to the running game when a trigger fires.",
+                    tooltip: "Unsafe launches the link without closing Roblox first. Sometimes Roblox bugs out and does not open over the running game. In Unsafe this fails silently: the snipe still counts, but Roblox never launches. Use Safe if you want launches you can rely on.",
                 },
-                ...(sendKillProcessSignal ? [
-                    {
-                        id: "macroType" as const, label: "Macro Type",
-                        description: "Select which macro you are using.",
-                        tooltip: "These are just pre-filled process names known for each macro type. If the macro you are using does not exist in this list, please pick Custom and provide the process name manually. If a preset stops matching anything, either you renamed the original .exe file, or your macro's version (updated or outdated) ships under a different file name than the one known here - in that case, switch to Custom and confirm the process name yourself.",
-                    },
-                ] : []),
-                ...(sendKillProcessSignal && macroType === "custom" ? [
-                    {
-                        id: "killMatchBy" as const, label: "Match By",
-                        description: "Whether to match your Custom target by process name or by window title.",
-                        tooltip: "Use Process Name for regular .exe tools. Use Window Title for script-based macros (e.g. AutoHotkey/.ahk) that run under a shared interpreter process - matching those by process name would also kill every other unrelated script using that same interpreter. Window Title supports wildcards (*), useful when the title includes a version number.",
-                    },
-                ] : []),
-            ] as SettingEntry[],
-            after: !sendKillProcessSignal ? undefined
-                : macroType === "custom" ? <MacroProcessNameEntry />
-                : <CheckProcessesButton />,
-        },
-        {
-            title: "Monitoring",
-            entries: [
-                { id: "monitoredGuilds", label: "Monitored Servers", chipKind: "guild", description: "If empty, the plugin monitors every server you're in. Add servers here to restrict it to only those.", tooltip: "Adding even one server means all other servers are silently ignored. Only use this if you want to restrict the plugin to specific servers." },
-                { id: "monitoredChannels", label: "Monitored Channels", chipKind: "channel", description: "If empty, the plugin monitors every channel in every server you're in. Add channels here to restrict it to only those.", tooltip: "Adding even one channel means every other channel is silently ignored. Only use this if you want to restrict the plugin to specific channels." },
-                { id: "ignoredGuilds", label: "Ignored Servers", chipKind: "guild", description: "Messages from these servers are always ignored, regardless of trigger settings." },
-                { id: "ignoredChannels", label: "Ignored Channels", chipKind: "channel", description: "Messages in these channels are always ignored, regardless of trigger settings." },
-                { id: "ignoredUsers", label: "Ignored Users", chipKind: "user", description: "Messages from these users are always ignored, regardless of trigger settings." },
-            ],
-        },
-        ...(detectorEnabled ? [{
-            title: "Biome Actions",
-            note: (
-                <Note variant="warning">
-                    Biome detection settings are managed on the plugin page in Vencord's plugin menu.
-                    Changes there require a Discord restart.
-                </Note>
-            ),
-            entries: [
-                { id: "onBiomeFalse" as const, label: "Action on Fake Biome", description: "What to do when the joined biome doesn't match what was announced." },
-                ...(onBiomeFalse !== "nothing" ? [
-                    { id: "biomeFalseActionTimeout" as const, label: "Fake Biome Action Delay (ms)", description: "Time to wait before executing. A cancellation prompt is shown during this window." },
-                ] : []),
-                { id: "onBiomeEnd" as const, label: "Action on Biome End", description: "What to do when a confirmed biome ends." },
-                ...(onBiomeEnd !== "nothing" ? [
-                    { id: "biomeEndActionTimeout" as const, label: "Biome End Action Delay (ms)", description: "Time to wait before executing. A cancellation prompt is shown during this window." },
-                ] : []),
-                { id: "onBiomeTimeout" as const, label: "Action on Biome Timeout", description: "What to do when biome detection times out without detecting any biome." },
-                ...(onBiomeTimeout !== "nothing" ? [
-                    { id: "biomeTimeoutActionTimeout" as const, label: "Biome Timeout Action Delay (ms)", description: "Time to wait before executing. A cancellation prompt is shown during this window." },
-                ] : []),
-                ...((onBiomeFalse !== "nothing" || onBiomeEnd !== "nothing" || onBiomeTimeout !== "nothing") ? [
-                    { id: "skipActionConfirmation" as const, label: "Skip Action Confirmation", description: "Execute actions immediately, without showing the cancellation prompt." },
-                ] : []),
-            ] as SettingEntry[],
-        }] : []),
-        ...(hasToken ? [{
-            title: "Link Verification",
-            note: (
-                <Note variant="warning">
-                    Your Roblox token is sensitive — treat it like a password and never share it.
-                    Use an alt account's token when possible.
-                </Note>
-            ),
-            entries: [
-                { id: "linkVerification" as const, label: "Verification Mode" },
-                ...(verificationEnabled ? [
-                    { id: "allowedPlaceIds" as const, label: "Allowed Place IDs", description: "Comma-separated. Only links pointing to these Place IDs will be accepted. Leave empty to allow any place." },
-                    { id: "onBadLink" as const, label: "Action on Bad Link" },
-                ] : []),
-            ] as SettingEntry[],
-        }] : []),
-    ];
-
-    // ── Advanced sections ─────────────────────────────────────────────────────
-
-    const advancedSections: Section[] = [
-        {
-            title: "ADB",
-            note: (
-                <>
-                    {!sendAdbSignal && (
+                ...(joinMode === "unsafe" ? [{
+                    key: "unsafeNote",
+                    search: "unsafe",
+                    node: (
                         <Note variant="warning">
-                            "LDPlayer ADB" is not selected as the close mode. These settings will have no effect.
+                            Unsafe: if Roblox fails to open over the running game, nothing tells you. The snipe still counts, but Roblox never launches.
                         </Note>
-                    )}
-                    <Note>
-                        When a snipe triggers, the plugin launches the join URI and simultaneously sends a close signal via ADB.
-                    </Note>
-                </>
-            ),
-            entries: [],
-            CustomEntries: AdbEntries,
-        },
-        {
-            title: "Forwarding",
-            entries: [
-                { id: "globalWebhookUrl", label: "Global Webhook URL", description: "Fallback webhook URL used when a trigger has forwarding enabled but no specific webhook configured." },
-                { id: "censorWebhooks", label: "Censor Webhooks", description: "Redact sender and channel info from forwarded webhook messages." },
-                { id: "forwardIgnoredGuilds", label: "No-Forward Servers", chipKind: "guild", description: "Messages from these servers are never forwarded." },
+                    ),
+                }] : []),
+                { id: "privateServerLink", label: "Private server link", description: "Your own private server. Needed by any action set to join it." },
+                { id: "deduplicateLinks", label: "Skip repeated links", description: "Ignore a link already seen in the last 10 minutes for the same trigger." },
+                { id: "resolveAmbiguousLinks", label: "Use the first link when there are several", description: "A message with different link types, like a share link next to a private server link, is skipped by default. Turn this on to use the first one." },
             ],
         },
         {
-            title: "Miscellaneous",
-            note: <Note variant="danger">Do <strong>NOT</strong> change these unless you know what you're doing.</Note>,
+            id: "biome",
+            title: "Biome actions",
+            subtitle: "What to do after a biome is detected",
+            note: detectorEnabled
+                ? <Note variant="warning">Biome detection is managed on the plugin page in Vencord's plugin menu. Changes there need a Discord restart.</Note>
+                : <Note variant="warning">Biome detection is off, so these actions never run. Turn it on from the plugin page in Vencord's plugin menu, then restart Discord.</Note>,
             entries: [
-                { id: "ignoreWebhookForwards", label: "Ignore Webhook Forwards", description: 'Ignore any message whose embed footer contains "solradar". Prevents the plugin from acting on its own forwarded webhooks.' },
-                { id: "advancedEmbedFlattening", label: "Advanced Embed Flattening", description: "Also extract embed fields and message component URLs when flattening embeds." },
-                { id: "customNotificationSoundDelay", label: "Notification Sound Delay (ms)", description: "Delay before playing the trigger's custom notification sound." },
-                { id: "omitAdbErrorNotifications", label: "Omit ADB Error Notifications", description: "Suppress the notification shown when an ADB kill signal fails. The error is still logged to the console." },
-                { id: "hideInactiveIndicator", label: "Hide Inactive Indicator", description: "Hide the red dot on the menu button when auto-join is disabled." },
+                { id: "onBiomeFalse", label: "When the biome is fake", description: "The biome you joined does not match the announcement." },
+                ...(onBiomeFalse !== "nothing" ? [{ id: "biomeFalseActionTimeout" as const, label: "Wait before acting (ms)", description: DELAY_DESCRIPTION }] : []),
+                { id: "onBiomeEnd", label: "When a biome ends", description: "A confirmed biome has ended." },
+                ...(onBiomeEnd !== "nothing" ? [{ id: "biomeEndActionTimeout" as const, label: "Wait before acting (ms)", description: DELAY_DESCRIPTION }] : []),
+                { id: "onBiomeTimeout", label: "When detection times out", description: "No biome was detected in time." },
+                ...(onBiomeTimeout !== "nothing" ? [{ id: "biomeTimeoutActionTimeout" as const, label: "Wait before acting (ms)", description: DELAY_DESCRIPTION }] : []),
+                ...(anyBiomeAction ? [{ id: "skipActionConfirmation" as const, label: "Act without asking", description: "Run these actions immediately, with no cancel prompt." }] : []),
+            ],
+        },
+        {
+            id: "verification",
+            title: "Link verification",
+            subtitle: "Check that a server link is real",
+            master: master("verification", verificationEnabled, v => { settings.store.linkVerification = v ? "before" : "disabled"; }),
+            note: robloxToken
+                ? <Note variant="warning">Your Roblox token is sensitive. Treat it like a password, never share it, and use an alt account when you can.</Note>
+                : <Note variant="warning">Link verification needs your Roblox token. Add it on the plugin page in Vencord's plugin menu.</Note>,
+            entries: [
+                { id: "linkVerification", label: "Verification mode", description: "When to check that a server link is real." },
+                { id: "allowedPlaceIds", label: "Allowed place IDs", description: "Comma-separated. Only links to these places are accepted. Leave empty to allow any place.", tech: true },
+                { id: "onBadLink", label: "When a link is bad", description: "What to do when verification fails." },
+            ],
+        },
+        {
+            id: "macro",
+            title: "Stop my macro",
+            subtitle: "Close your macro when a snipe happens",
+            tooltip: "SolRadar closes the macro by its process name or window title, like ending it in Task Manager. This keeps it from reporting a fake biome to its server.",
+            master: master("macro", sendKillProcessSignal, v => { settings.store.sendKillProcessSignal = v; }),
+            entries: [
+                {
+                    id: "macroType", label: "Macro", description: "Which macro to stop.",
+                    tooltip: "Presets are names known for each macro. If a preset finds nothing, you may have renamed the .exe or your version ships under another name. Pick Custom and confirm the name yourself.",
+                },
+                ...(macroType === "custom" ? [{
+                    id: "killMatchBy" as const, label: "Find the macro by", description: "How your Custom macro is located.",
+                    tooltip: "Use Process Name for regular .exe tools. Use Window Title for script macros (AutoHotkey) that share one interpreter process, so other scripts are not closed too. Window titles accept wildcards (*).",
+                }] : []),
+                macroType === "custom"
+                    ? { key: "macroTarget", search: "macro process name window title", node: <MacroProcessNameEntry /> }
+                    : { key: "macroCheck", search: "check processes", node: <CheckProcessesButton /> },
+            ],
+        },
+        {
+            id: "monitoring",
+            title: "Monitoring",
+            subtitle: "Which servers, channels and users to listen to",
+            entries: [
+                { id: "monitoredGuilds", label: "Only monitor these servers", chipKind: "guild", description: "Leave empty to monitor all of your servers.", tooltip: "Adding even one server means every other server is silently ignored." },
+                { id: "monitoredChannels", label: "Only monitor these channels", chipKind: "channel", description: "Leave empty to monitor every channel.", tooltip: "Adding even one channel means every other channel is silently ignored." },
+                { id: "ignoredGuilds", label: "Always ignore these servers", chipKind: "guild", description: "Overrides every trigger. Good for servers with no-sniper rules." },
+                { id: "ignoredChannels", label: "Always ignore these channels", chipKind: "channel", description: "Overrides every trigger." },
+                { id: "ignoredUsers", label: "Always ignore these users", chipKind: "user", description: "Overrides every trigger." },
+            ],
+        },
+        {
+            id: "reading",
+            title: "Reading messages",
+            subtitle: "How embeds and links are read",
+            entries: [
+                { id: "flattenEmbeds", label: "Read embeds", description: "Also match triggers against embed titles and descriptions. Needed for macro servers that post biomes inside embeds." },
+                { id: "advancedEmbedFlattening", label: "Deep embed reading", description: "Also read embed fields and message component URLs when reading embeds.", tech: true },
+                { id: "interpretJoinguardLinks", label: "Accept Joinguard links", description: "Handle Sol's Stat Tracker Joinguard links. They open your browser for Cloudflare verification, so the place cannot be checked." },
+                { id: "ignoreWebhookForwards", label: "Ignore SolRadar's own forwards", description: "Skip any message whose embed footer contains \"solradar\", so the plugin never reacts to its own webhooks.", tech: true },
+            ],
+        },
+        {
+            id: "forwarding",
+            title: "Forwarding",
+            subtitle: "Send matches to a Discord webhook",
+            entries: [
+                { id: "globalWebhookUrl", label: "Global webhook URL", description: "Used when a trigger forwards but has no webhook of its own." },
+                { id: "censorWebhooks", label: "Censor webhooks", description: "Redact sender and channel info in forwarded messages." },
+                { id: "forwardIgnoredGuilds", label: "Never forward from these servers", chipKind: "guild", description: "Messages from these servers are never forwarded." },
+            ],
+        },
+        {
+            id: "interface",
+            title: "Interface",
+            subtitle: "Privacy and menus",
+            entries: [
+                { id: "anonymizeEverything", label: "Anonymize snipes", description: "Hides the author, server, channel, message and logs of each snipe in History. Turn it on before sharing screenshots.", tooltip: "Click an entry in Snipe History to reveal it on its own." },
+                { id: "shouldCheckForUpdates", label: "Check for updates", description: "Look for a new SolRadar version on startup.", tooltip: "Runs at most once a day and shows a notification when an update is available." },
+                { id: "useButtonsForOrderingTriggers", label: "Reorder triggers with buttons", description: "Use the ▲▼ buttons instead of drag and drop." },
+                { id: "useTriggerTabContextMenu", label: "Trigger context menu", description: "Right-click a trigger for enable, edit, duplicate, export and remove. When off, right-click only toggles it." },
+            ],
+        },
+        {
+            id: "other",
+            title: "Other",
+            subtitle: "Small extras",
+            entries: [
+                { id: "hideInactiveIndicator", label: "Hide the inactive dot", description: "Hide the red dot on the menu button while auto-join is off." },
+                { id: "customNotificationSoundDelay", label: "Notification sound delay (ms)", description: "Delay before a trigger's custom sound plays.", tech: true },
+            ],
+        },
+        {
+            id: "adb",
+            title: "Emulator (ADB)",
+            subtitle: "Close Roblox inside an Android emulator after joining",
+            tech: true,
+            master: master("adb", sendAdbSignal, v => { settings.store.sendAdbSignal = v; }),
+            keepBodyVisible: adbUsedByAction,
+            note: sendAdbSignal
+                ? <Note>When a snipe triggers, SolRadar launches the join link and sends a close signal through ADB at the same time.</Note>
+                : <Note variant="warning">The close signal is off, but an action uses Prepare ADB, so these settings still apply.</Note>,
+            entries: [
+                { id: "ldpAdbPath", label: "ADB path", description: "Full path to adb.exe." },
+                { key: "adbSerial", search: "device serial adb devices", node: <AdbSerialEntry /> },
+                { id: "ldpAdbPackageName", label: "Package name", description: "App to force-stop on the device. Default: com.roblox.client" },
+                { id: "omitAdbErrorNotifications", label: "Silence ADB error notifications", description: "The error is still logged to the console.", tech: true },
             ],
         },
     ];
 
-    // ── Filtering ─────────────────────────────────────────────────────────────
+    // --- Filtering ---
 
     const q = search.trim().toLowerCase();
 
-    function filterSections(sections: Section[]): Section[] {
-        if (!q) return sections;
-        return sections
-            .map(s => {
-                if (s.CustomEntries) return s.title.toLowerCase().includes(q) ? s : null;
-                return { ...s, entries: s.entries.filter(e => e.label.toLowerCase().includes(q)) };
-            })
-            .filter((s): s is Section => s !== null && (!!s.CustomEntries || s.entries.length > 0));
-    }
+    const entryMatches = (e: Entry) => isCustom(e)
+        ? e.search.toLowerCase().includes(q)
+        : `${e.label} ${e.description ?? ""}`.toLowerCase().includes(q);
 
-    const filteredSimple = filterSections(simpleSections);
-    const filteredAdvanced = filterSections(advancedSections);
-    const advancedVisible = showAdvanced || (!!q && filteredAdvanced.length > 0);
+    const visibleBlocks = blocks
+        .map(b => {
+            if (!q || b.title.toLowerCase().includes(q)) return b;
+            return { ...b, entries: b.entries.filter(entryMatches) };
+        })
+        .filter(b => !q || b.title.toLowerCase().includes(q) || b.entries.length > 0);
 
-    function renderSection(section: Section) {
-        return (
-            <React.Fragment key={section.title}>
-                <p style={sectionTitle}>{section.title}</p>
-                {section.note}
-                {section.CustomEntries
-                    ? <section.CustomEntries />
-                    : section.entries.map(e => (
-                        <Setting key={e.id} id={e.id} label={e.label} description={e.description} tooltip={e.tooltip} chipKind={e.chipKind} />
-                    ))
-                }
-                {section.after}
-            </React.Fragment>
-        );
-    }
+    const renderEntry = (e: Entry) => isCustom(e)
+        ? <React.Fragment key={e.key}>{e.node}</React.Fragment>
+        : <Setting key={e.id} id={e.id} label={e.label} description={e.description} tooltip={e.tooltip} chipKind={e.chipKind} tech={e.tech} />;
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 20 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 20 }}>
 
             <TextInput
                 value={search}
                 onChange={setSearch}
                 placeholder="Search settings…"
-                style={{ marginBottom: 4 }}
             />
 
-            {/* Simple sections */}
-            {filteredSimple.map(renderSection)}
+            {!q && <Overview onFix={handleFix} />}
 
-            {/* Advanced toggle */}
-            {!q && (
-                <button
-                    onClick={() => setShowAdvanced(v => !v)}
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginTop: 20,
-                        background: "none",
-                        border: "none",
-                        borderTop: "1px solid var(--background-mod-subtle)",
-                        padding: "10px 0 0",
-                        cursor: "pointer",
-                        width: "100%",
-                        textAlign: "left",
-                    }}
+            {visibleBlocks.map(b => (
+                <Block
+                    key={b.id}
+                    title={b.title}
+                    subtitle={b.subtitle}
+                    tooltip={b.tooltip}
+                    tech={b.tech}
+                    master={b.master}
+                    keepBodyVisible={b.keepBodyVisible}
+                    open={!!q || openBlocks[b.id]}
+                    onToggle={() => setOpen(b.id, !openBlocks[b.id])}
                 >
-                    <span style={{
-                        color: "var(--text-muted)",
-                        fontSize: 10,
-                        display: "inline-block",
-                        lineHeight: 1,
-                        transition: "transform 0.15s",
-                        transform: showAdvanced ? "rotate(90deg)" : "rotate(0deg)",
-                    }}>▶</span>
-                    <span style={{
-                        color: "var(--text-muted)",
-                        fontSize: 11,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                    }}>
-                        Advanced
-                    </span>
-                </button>
-            )}
+                    {b.note}
+                    {b.entries.map(renderEntry)}
+                </Block>
+            ))}
 
-            {/* Advanced sections */}
-            {advancedVisible && filteredAdvanced.map(renderSection)}
-
-            {filteredSimple.length === 0 && filteredAdvanced.length === 0 && (
+            {visibleBlocks.length === 0 && (
                 <Note>No settings found for "{search}".</Note>
             )}
+
+            {!q && <DebugReport />}
 
         </div>
     );

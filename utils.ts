@@ -6,10 +6,10 @@
 
 import { showNotification } from "@api/Notifications";
 import { classNameFactory } from "@utils/css";
-import { Logger } from "@utils/Logger";
 import { PluginNative } from "@utils/types";
 import { AuthenticationStore, showToast as defaultShowToast } from "@webpack/common";
 
+import { Logger } from "./logger";
 import { MACRO_PRESETS, settings } from "./settings";
 import { ChangelogEntry, ChangelogVersion, VersionManifest } from "./types";
 import versionManifest from "./version.json";
@@ -22,12 +22,7 @@ const LOCAL_VERSION = versionManifest as VersionManifest;
 export const PLUGIN_VERSION: string = LOCAL_VERSION.currentVersion;
 export const PLUGIN_CHANGELOG: ChangelogVersion[] = LOCAL_VERSION.changelog;
 
-/**
- * Converts a CSV string to a Set of strings
- * @param {string} [csv] CSV string, e.g. "123,456,789"
- * @returns {Set<string>} Set of strings, e.g. Set("123", "456", "789")
- * @throws {TypeError} If the given parameter is not a string or undefined
- */
+/** Splits "123, 456,789" into Set("123", "456", "789"), dropping empty items. */
 export function parseCsv(csv?: string): Set<string> {
     if (typeof csv !== "string" && csv !== undefined) throw new TypeError("Expected a string or undefined as the first argument");
     if (!csv?.trim()) return new Set();
@@ -39,10 +34,7 @@ export interface KillTargets {
     values: Set<string>;
 }
 
-/**
- * Resolves the kill target(s) for the currently selected macro type - a preset's hardcoded
- * match mode/value, or the user-provided killMatchBy + killProcessNames when set to "Custom".
- */
+/** What to kill for the selected macro: the preset's target, or the user's own when set to Custom. */
 export function getEffectiveKillTargets(): KillTargets {
     const preset = MACRO_PRESETS[settings.store.macroType];
     if (preset) return { matchBy: preset.matchBy, values: parseCsv(preset.matchValue) };
@@ -52,26 +44,11 @@ export function getEffectiveKillTargets(): KillTargets {
     };
 }
 
-/**
- * Sends a webhook to the specified URL with the given body
- * @param {string} url URL of the webhook
- * @param {string} body Body of the webhook
- * @returns {Promise<void>} Promise that resolves once the webhook has been sent
- * @param url
- */
 export async function sendWebhook(url: string, body: string): Promise<void> {
     return await Native.sendWebhook(url, body);
 }
 
-/**
- * Converts a duration in milliseconds to a human-readable string.
- *
- * @param {number} ms Duration in milliseconds.
- * @param {boolean} [alwaysIncludeMs=false] If true, includes the remaining
- * milliseconds in the output even when the duration is ≥ 1 second
- * (e.g., "1s 500ms" instead of "1s"). Also includes "0ms" when applicable.
- * @returns {string} Human-readable string, e.g. "2h 3m 4s" or "2h 3m 4s 500ms".
- */
+/** Formats ms as "2h 3m 4s". With alwaysIncludeMs, leftover ms are kept too ("1s 500ms"). */
 export function formatElapsedTime(ms: number, { alwaysIncludeMs = false }: { alwaysIncludeMs?: boolean; } = {}): string {
     ms = Math.floor(ms);
     if (ms < 1000 && !alwaysIncludeMs) {
@@ -107,7 +84,7 @@ export function isDeveloper(): boolean {
 }
 
 
-// returns the userid of the current user
+// Placeholder: always returns an empty string for now
 export function whoAmI(): string {
     return "";
 }
@@ -123,7 +100,7 @@ export function playAudio(dataUri: string, volume: number = 100): void {
     }
 }
 
-// this is insanely stupid
+// Never let a failing toast break the caller
 export function showToast(...args: Parameters<typeof defaultShowToast>): void {
     try {
         defaultShowToast(...args);
@@ -135,15 +112,7 @@ export function showToast(...args: Parameters<typeof defaultShowToast>): void {
     }
 }
 
-/**
- * Recursively extracts all URLs from a Discord message component tree.
- *
- * Traverses nested components (such as action rows, buttons, and other
- * container components) and collects every `url` property found.
- *
- * @param {any[]} components Array of Discord message components.
- * @returns {string[]} Array containing all extracted URLs.
- */
+/** Collects every `url` in a Discord message component tree (action rows, buttons and so on). */
 export function extractComponentUrls(components: any[]): string[] {
     const urls: string[] = [];
 
@@ -164,7 +133,7 @@ export const redact = (min = 6, max = 14) =>
     "█".repeat(Math.floor(Math.random() * (max - min + 1)) + min);
 
 
-// version control utilitaries
+// --- Versioning ---
 export function getCurrentVersion(): string {
     return LOCAL_VERSION.currentVersion;
 }
@@ -203,10 +172,7 @@ export async function getLatestPublishedManifest(): Promise<VersionManifest | nu
 /**
  * Parses a version string into comparable parts.
  *
- * Examples:
- * - 1.2.3
- * - 1.2.3-beta
- * - 0.0.0-batata
+ * Examples: 1.2.3, 1.2.3-beta, 0.0.0-dev
  */
 function parseVersion(version: string) {
     const [numeric, suffix = ""] = version.split("-", 2);
@@ -217,9 +183,7 @@ function parseVersion(version: string) {
     };
 }
 
-/**
- * Returns whether the latest version is newer than the current version.
- */
+/** Whether `latest` is newer than `current`. */
 export function isVersionNewer(
     current: string,
     latest: string
@@ -281,12 +245,13 @@ export function getCurrentVersionEntries(): ChangelogEntry[] {
     );
 }
 
-export async function checkForUpdates(): Promise<void> {
+/** Fetches the latest published version. Returns false if the update server could not be reached. */
+export async function checkForUpdates(): Promise<boolean> {
     const manifest = await getLatestPublishedManifest();
 
     if (!manifest) {
         logger.debug("Failed to fetch latest version.");
-        return;
+        return false;
     }
 
     const latestRelease = manifest.changelog.find(
@@ -302,7 +267,7 @@ export async function checkForUpdates(): Promise<void> {
 
     if (!isVersionNewer(getCurrentVersion(), manifest.currentVersion)) {
         logger.debug("Plugin is already up to date.");
-        return;
+        return true;
     }
 
     logger.warn(
@@ -313,6 +278,7 @@ export async function checkForUpdates(): Promise<void> {
         title: "SoRa :: Update Available!",
         body: `A new version of SolRadar is available: ${manifest.currentVersion} (current: ${getCurrentVersion()})`
     });
+    return true;
 }
 
 export async function ensureDailyVersionCheck(): Promise<void> {

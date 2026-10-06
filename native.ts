@@ -24,13 +24,11 @@ import * as os from "os";
 import * as path from "path";
 import { promisify } from "util";
 
-// import { LogEntry } from "./Detector";
-
 const logger = new Logger("SolRadar.Native");
 
 const exec = promisify(execCb);
 
-// ─── Tipos públicos ───────────────────────────────────────────────────────────
+// --- Public types ---
 
 export type ProcessInfo = {
     pid: number;
@@ -42,7 +40,7 @@ export type ResolvedShareLink =
     | { ok: true; placeId: string; serverId: string; ownerId: string; isValid: boolean; updatedToken: string | null; }
     | { ok: false; status: number; error: string; };
 
-/** Entrada de log do Roblox — definida aqui pra evitar import circular com BiomeDetector. */
+/** A Roblox log file. Defined here to avoid a circular import with BiomeDetector. */
 export interface LogEntry {
     path: string;
     account: string | null;
@@ -50,7 +48,7 @@ export interface LogEntry {
 }
 
 
-// stuff
+// --- Webhooks ---
 
 export async function sendWebhook(_: IpcMainInvokeEvent, url: string, body: string): Promise<void> {
     const res = await fetch(url, {
@@ -61,12 +59,9 @@ export async function sendWebhook(_: IpcMainInvokeEvent, url: string, body: stri
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 }
 
-// ─── Roblox: abrir URI ────────────────────────────────────────────────────────
+// --- Roblox: open URI ---
 
-/**
- * Abre uma URI via `start ""` no Windows.
- * Usado para deeplinks do tipo `roblox://` e `roblox-player://`.
- */
+/** Opens a `roblox://` or `roblox-player://` deeplink with `start ""`. Windows only. */
 export async function openUri(_: IpcMainInvokeEvent, uri: string): Promise<void> {
     if (process.platform !== "win32") {
         throw new Error("openUri only works on Windows.");
@@ -76,23 +71,18 @@ export async function openUri(_: IpcMainInvokeEvent, uri: string): Promise<void>
     }
 
     try {
-        // could be exploited...?
+        // The URI goes into a shell command, so only pass URIs built by the plugin.
         await exec(`start "" "${uri}"`);
     } catch (error) {
         throw new Error(`Failed to open URI "${uri}": ${(error as Error).message}`);
     }
 }
 
-// ─── Roblox: resolver sharelink ───────────────────────────────────────────────
+// --- Roblox: resolve share link ---
 
 /**
- * Resolve um share code do Roblox para placeId + serverId em um único passo.
- *
- * Internamente:
- *  1. Faz um POST sem body para obter o CSRF token (cookie já traz a resposta 403)
- *  2. Usa o CSRF para fazer o POST real de resolução
- *
- * Retorna ResolvedShareLink com ok=true e os IDs, ou ok=false com o motivo.
+ * Resolves a Roblox share code to its placeId and serverId.
+ * Makes two requests: the first only fetches a CSRF token (it always answers 403), the second resolves the link.
  */
 export async function resolveShareLink(
     _: IpcMainInvokeEvent,
@@ -118,7 +108,7 @@ export async function resolveShareLink(
     }
 
     try {
-        // Passo 1 — obtém CSRF (o endpoint sempre retorna 403 na primeira chamada sem CSRF)
+        // Step 1: get the CSRF token
         const csrfRes = await fetch(RESOLVE_URL, {
             method: "POST",
             headers: headers(),
@@ -131,7 +121,7 @@ export async function resolveShareLink(
 
         const updatedToken = extractUpdatedToken(csrfRes);
 
-        // Passo 2 — resolução real
+        // Step 2: resolve the link
         const resolveRes = await fetch(RESOLVE_URL, {
             method: "POST",
             headers: headers(csrf),
@@ -149,7 +139,7 @@ export async function resolveShareLink(
             return { ok: false, status: resolveRes.status, error: "Invalid JSON in resolve response." };
         }
 
-        // O campo varia entre versões da API do Roblox — tenta as duas formas conhecidas
+        // The field location changed between Roblox API versions, so try both
         const placeId: string | undefined =
             data?.privateServerInviteData?.placeId?.toString() ??
             data?.placeId?.toString();
@@ -178,7 +168,7 @@ export async function resolveShareLink(
     }
 }
 
-// ─── Processos ────────────────────────────────────────────────────────────────
+// --- Processes ---
 
 type ProcessLookupTarget =
     | { type: "tasklist"; processName: string; }
@@ -198,8 +188,7 @@ export async function getProcess(
         if (!windowTitle || typeof windowTitle !== "string") {
             throw new Error("Invalid argument: windowTitle must be a non-empty string.");
         }
-        // Matches by top-level window title instead of image name — needed for script-based
-        // macros (e.g. AutoHotkey) that all share the same interpreter process name.
+        // Match by window title for script macros (e.g. AutoHotkey) that share one interpreter process.
         const { stdout } = await exec(
             `tasklist /FI "WINDOWTITLE eq ${windowTitle}" /FO CSV /NH`
         );
@@ -250,7 +239,7 @@ export async function killProcess(
         ? `taskkill /PID ${target.pid} /F`
         : "pname" in target
             ? `taskkill /IM "${target.pname}" /F`
-            // No /IM or /PID here — /FI alone selects and kills every process matching the filter.
+            // /FI alone selects and kills every process matching the filter
             : `taskkill /FI "WINDOWTITLE eq ${target.windowTitle}" /F`;
 
     try {
@@ -279,14 +268,12 @@ export async function gracefullyKillProcess(
     try {
         await exec(softCommand);
     } catch {
-        // Process may already be gone — skip straight to done
-        return;
+        return; // already gone
     }
 
-    // Give the process time to exit gracefully
     await new Promise(resolve => setTimeout(resolve, timeoutMs));
 
-    // Check if it's still alive; if so, force-kill
+    // Force-kill if it is still alive
     try {
         const checkCommand = "pid" in target
             ? `tasklist /FI "PID eq ${target.pid}" /NH`
@@ -296,11 +283,9 @@ export async function gracefullyKillProcess(
         const isAlive = stdout.trim().length > 0 && !stdout.includes("No tasks");
 
         if (isAlive) {
-            await exec(hardCommand).catch(() => { /* already dead */ });
+            await exec(hardCommand).catch(() => { });
         }
-    } catch {
-        // tasklist failure means the process is gone — nothing to do
-    }
+    } catch { } // tasklist fails when the process is already gone
 }
 
 export async function closeRobloxOnEmulator(
@@ -318,7 +303,7 @@ export async function closeRobloxOnEmulator(
     }
 
     try {
-        // this exec could be exploited... lets hope the user doesnt do anything stupid :clueless:
+        // These values come from settings and go straight into a shell command
         await exec(`"${adbPath}" -s ${deviceSerial} shell am force-stop ${packageName}`);
         return { ok: true };
     } catch (err: any) {
@@ -341,7 +326,7 @@ export async function emulatorOpenUri(
     }
 
     try {
-        // could be exploited... hope the user doesnt do anything stupid :clueless:
+        // The URI runs in the device shell, so only pass URIs built by the plugin
         const proc = spawn(adbPath, [
             "-s", deviceSerial,
             "shell",
@@ -405,19 +390,15 @@ export async function killAdbServer(
     }
 }
 
-// ─── Biome detection ──────────────────────────────────────────────────────────
-// As funções abaixo são responsabilidade do Detector.ts mas ficam aqui
-// pois requerem acesso ao Node/fs (native context).
+// --- Biome detection ---
+// Used by BiomeDetector, but lives here because it needs Node's fs.
 
 const ROBLOX_LOGS_DIR = path.join(os.homedir(), "AppData", "Local", "Roblox", "logs");
-const LOG_TAIL_READ_BYTES = 2 * 1024 * 1024; // 2 MB — tail lido por tick
-const LOG_HEAD_READ_BYTES = 1 * 1024 * 1024; // 1 MB — head lido pra extrair userid/username
-const LOG_MAX_AGE_S = 7_200; // 2h — logs mais velhos são ignorados
+const LOG_TAIL_READ_BYTES = 2 * 1024 * 1024; // read on every tick
+const LOG_HEAD_READ_BYTES = 1 * 1024 * 1024; // enough to find the userid/username
+const LOG_MAX_AGE_S = 7_200; // older logs are ignored
 
-/**
- * Lista logs do Roblox recentes e extrai o account (userid ou username) de cada um.
- * Usa uma única chamada a `fs.statSync` por arquivo (cache local) em vez de três.
- */
+/** Lists recent Roblox logs with the account (userid or username) found in each one. */
 export function getRobloxLogs(_: IpcMainInvokeEvent, from: "username" | "userid"): LogEntry[] {
     const nowMs = Date.now();
 
@@ -441,7 +422,6 @@ export function getRobloxLogs(_: IpcMainInvokeEvent, from: "username" | "userid"
         return [];
     }
 
-    // Sort newest first
     entries.sort((a, b) => b.mtime - a.mtime);
 
     return entries.flatMap(({ file, mtime }) => {
@@ -456,7 +436,6 @@ export function getRobloxLogs(_: IpcMainInvokeEvent, from: "username" | "userid"
     });
 }
 
-/** @internal — só chamado pelo getRobloxLogs, não exposto como IPC handler. */
 function _getUsernameFromLog(logPath: string): string | null {
     try {
         const head = _readHead(logPath);
@@ -464,7 +443,6 @@ function _getUsernameFromLog(logPath: string): string | null {
     } catch { return null; }
 }
 
-/** @internal */
 function _getUseridFromLog(logPath: string): string | null {
     try {
         const head = _readHead(logPath);
@@ -472,7 +450,6 @@ function _getUseridFromLog(logPath: string): string | null {
     } catch { return null; }
 }
 
-/** Lê os primeiros LOG_HEAD_READ_BYTES do arquivo como UTF-8. */
 function _readHead(logPath: string): string {
     const fd = fs.openSync(logPath, "r");
     const buffer = Buffer.alloc(LOG_HEAD_READ_BYTES);
@@ -482,12 +459,10 @@ function _readHead(logPath: string): string {
 }
 
 /**
- * Lê o tail do log e extrai RPCs de bioma e eventos de desconexão.
- *
- * Retorna:
- * - `rpcs`                — linhas completas de BloxstrapRPC, da mais antiga à mais nova
- * - `disconnects`         — timestamps de Client:Disconnect encontrados no tail
- * - `effectiveDisconnected` — true se o disconnect mais recente é posterior à RPC mais recente
+ * Reads the end of a log and returns:
+ * - `rpcs`: BloxstrapRPC lines, oldest first
+ * - `disconnects`: timestamps of Client:Disconnect lines
+ * - `effectiveDisconnected`: true if the last disconnect happened after the last RPC
  */
 export function getRelevantRpcsFromLogTail(
     _: IpcMainInvokeEvent,
@@ -509,7 +484,7 @@ export function getRelevantRpcsFromLogTail(
         fs.closeSync(fd);
         const content = buffer.slice(0, bytesRead).toString("utf8");
 
-        // ── Disconnects ───────────────────────────────────────────────────────
+        // Disconnects
         const disconnects: string[] = [];
         const disconnectRe = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z).*Client:Disconnect/g;
         let m: RegExpExecArray | null;
@@ -518,7 +493,7 @@ export function getRelevantRpcsFromLogTail(
             ? new Date(disconnects[disconnects.length - 1]).getTime()
             : undefined;
 
-        // ── RPCs — busca reversa pra manter O(tail) em vez de O(file) ────────
+        // RPCs, searched backwards
         const rpcs: string[] = [];
         let searchFrom = content.length;
         while (true) {
@@ -530,7 +505,6 @@ export function getRelevantRpcsFromLogTail(
             searchFrom = idx - 1;
         }
 
-        // ── effectiveDisconnected ─────────────────────────────────────────────
         let mostRecentRpcMs: number | undefined;
         if (rpcs.length) {
             const ts = rpcs[rpcs.length - 1].match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)/);
@@ -547,12 +521,9 @@ export function getRelevantRpcsFromLogTail(
     }
 }
 
-// ─── Roblox API ───────────────────────────────────────────────────────────────
+// --- Roblox API ---
 
-/**
- * Converte uma lista de usernames do Roblox em userids via API pública.
- * Usernames não encontrados ficam como null no resultado.
- */
+/** Converts Roblox usernames to user IDs. Usernames that are not found map to null. */
 export async function robloxUsernamesToUserIds(
     _: IpcMainInvokeEvent,
     usernames: string[]
@@ -570,7 +541,7 @@ export async function robloxUsernamesToUserIds(
         for (const entry of (data.data ?? [])) {
             if (entry?.requestedUsername) result[entry.requestedUsername] = entry.id ?? null;
         }
-    } catch { /* silencioso */ }
+    } catch { }
 
     return result;
 }

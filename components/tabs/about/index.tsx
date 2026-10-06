@@ -8,10 +8,10 @@ import { React, useState } from "@webpack/common";
 
 import { PLUGIN_VERSION } from "../../../utils";
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
+// --- Data ---
 
 const DESCRIPTION =
-    "SolRadar monitors Discord channels for private Roblox server links and — if configured — " +
+    "SolRadar monitors Discord channels for private Roblox server links and, if configured, " +
     "joins them the moment they're detected.";
 
 const QUICK_STEPS = [
@@ -57,7 +57,7 @@ const LINKS = [
     { label: "Support server", url: "https://discord.gg/EfWHGGz7MG" },
 ];
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// --- Styles ---
 
 const ROLE_COLOR: Record<CreditRole, string> = {
     Author: "var(--brand-500)",
@@ -66,7 +66,7 @@ const ROLE_COLOR: Record<CreditRole, string> = {
     Framework: "hsl(270deg 60% 58%)",
 };
 
-// ─── Quick Setup ──────────────────────────────────────────────────────────────
+// --- Quick Setup ---
 
 function QuickSetup() {
     const [open, setOpen] = useState(false);
@@ -130,7 +130,7 @@ function QuickSetup() {
     );
 }
 
-// ─── Credit Card ──────────────────────────────────────────────────────────────
+// --- Credit Card ---
 
 function CreditCard({ entry }: { entry: CreditEntry; }) {
     const color = ROLE_COLOR[entry.role];
@@ -178,13 +178,13 @@ function CreditCard({ entry }: { entry: CreditEntry; }) {
     return <div style={wrapStyle}>{content}</div>;
 }
 
-// ─── AboutTab ─────────────────────────────────────────────────────────────────
+// --- AboutTab ---
 
 export function AboutTab() {
     return (
         <div style={{ display: "flex", flexDirection: "column", padding: 16, gap: 0, boxSizing: "border-box" }}>
 
-            {/* ── Hero ── */}
+            {/* Hero */}
             <div style={{
                 borderRadius: 10,
                 background: "var(--background-mod-subtle)",
@@ -237,7 +237,7 @@ export function AboutTab() {
                 </div>
             </div>
 
-            {/* ── Quick Setup ── */}
+            {/* Quick Setup */}
             <div style={{
                 borderRadius: 10,
                 border: "1px solid var(--background-mod-normal)",
@@ -247,7 +247,7 @@ export function AboutTab() {
                 <QuickSetup />
             </div>
 
-            {/* ── Credits ── */}
+            {/* Credits */}
             <div>
                 <span style={{
                     fontSize: 11, fontWeight: 700, textTransform: "uppercase",

@@ -8,31 +8,28 @@ import "./EditableActionButton.css";
 
 import { Button, ButtonSize } from "@components/Button";
 import { Heading } from "@components/Heading";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { React, TextInput } from "@webpack/common";
 
 import { UIState } from "../../stores/UIStateStore";
+import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "./LegacyModal";
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 export interface EditableActionButtonProps {
-    /**
-     * Identificador único do botão — usado como chave de persistência.
-     * Use um nome estável e descritivo, ex: "prepareAdb-uri".
-     */
+    /** Unique and stable, used as the storage key (e.g. "prepareAdb-uri"). */
     id: string;
-    /** Label padrão exibida no botão (pode ser sobrescrita pelo usuário) */
+    /** Default label. The user can override it. */
     defaultLabel: string;
-    /** Valor padrão do parâmetro (pode ser sobrescrito pelo usuário) */
+    /** Default value. The user can override it. */
     defaultValue?: string;
-    /** Placeholder do campo de valor no modal */
+    /** Placeholder for the value field in the edit modal. */
     placeholder?: string;
-    /** Callback executado ao clicar — recebe o valor atual (custom ou default) */
+    /** Called on click with the current value (custom or default). */
     onAction: (value: string | undefined) => void;
     size?: ButtonSize;
 }
 
-// ─── Modal de edição ──────────────────────────────────────────────────────────
+// --- Edit modal ---
 
 interface EditModalProps {
     modalProps: ModalProps;
@@ -83,7 +80,7 @@ function EditModal({
             <ModalContent>
                 <div className="vc-sora-eab-modal-content">
 
-                    {/* ── Label ── */}
+                    {/* Label */}
                     <div className="vc-sora-eab-field">
                         <span className="vc-sora-eab-field-label">Button label</span>
                         <div className="vc-sora-eab-preview">
@@ -105,7 +102,7 @@ function EditModal({
 
                     <div className="vc-sora-eab-divider" />
 
-                    {/* ── Value ── */}
+                    {/* Value */}
                     <div className="vc-sora-eab-field">
                         <span className="vc-sora-eab-field-label">Parameter value</span>
                         {defaultValue && (
@@ -164,7 +161,7 @@ function EditModal({
     );
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+// --- Main component ---
 
 export function EditableActionButton({
     id,
@@ -214,7 +211,7 @@ export function EditableActionButton({
                 {effectiveLabel}
             </Button>
 
-            {/* Dot: azul = algum campo customizado, cinza = tudo padrão */}
+            {/* Dot: blue when customized, gray when all defaults */}
             <span
                 className={`vc-sora-eab-indicator ${hasCustom ? "vc-sora-eab-indicator-custom" : "vc-sora-eab-indicator-default"}`}
                 title={hasCustom

@@ -5,12 +5,10 @@
  */
 
 import { Heading } from "@components/Heading";
-import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { React } from "@webpack/common";
 
 import { UIState } from "../stores/UIStateStore";
 import { hasNewVersionAvailable, isDeveloper } from "../utils";
-import { AboutTab } from "./tabs/about";
 import { DeveloperTab } from "./tabs/developer";
 import { RecentJoinsTab } from "./tabs/recentJoins";
 import { SettingsTab } from "./tabs/settings";
@@ -18,8 +16,9 @@ import { StatsTab } from "./tabs/stats";
 import { TriggersTab } from "./tabs/triggers";
 import { UpdatesTab } from "./tabs/updates";
 import { UtilsTab } from "./tabs/utils";
+import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "./ui/LegacyModal";
 
-// ─── Definição das tabs ────────────────────────────────────────────────────────
+// --- Tabs ---
 
 type TabId = "recentJoins" | "triggers" | "settings" | "about" | "dev" | "stats" | "utilities" | "updates" | "testtab2" | "testtab3";
 
@@ -52,7 +51,7 @@ function resolveTab(tab: TabId): TabId {
     return visible.some(t => t.id === tab) ? tab : FALLBACK_TAB;
 }
 
-// ─── Modal principal ──────────────────────────────────────────────────────────
+// --- Main modal ---
 
 interface SolsRadarModalProps {
     modalProps: ModalProps;
@@ -63,7 +62,6 @@ export function SolsRadarModal({ modalProps, initialTab }: SolsRadarModalProps) 
         resolveTab(initialTab ?? UIState.get("activeTab"))
     );
     const hasUpdate = hasNewVersionAvailable();
-    // const hasUpdate = true;
 
     const tabsRef = React.useRef<HTMLDivElement>(null);
 
@@ -170,7 +168,7 @@ export function SolsRadarModal({ modalProps, initialTab }: SolsRadarModalProps) 
     );
 }
 
-// ─── Helper de abertura ───────────────────────────────────────────────────────
+// --- Open helper ---
 
 export const openSolsRadarModal = (initialTab?: TabId) =>
     openModal(p => <SolsRadarModal modalProps={p} initialTab={initialTab} />);

@@ -1,6 +1,20 @@
 {
-    "currentVersion": "1.3.6",
+    "currentVersion": "1.4.0",
     "changelog": [
+        {
+            "version": "1.4.0",
+            "entries": [
+                { "type": "Improved", "text": "Redesigned the whole plugin", "description": "Every tab has a new look, built to match Discord's own settings pages." },
+                { "type": "Improved", "text": "Settings tab", "description": "Settings are grouped into collapsible blocks that remember if they are open, with an overview of what is on at the top." },
+                { "type": "Added", "text": "Debug report", "description": "Something not working? Send your setup to the developer from the bottom of the Settings tab. Your Roblox token is never included." },
+                { "type": "Improved", "text": "Snipe History", "description": "Snipes are now a timeline grouped by day, colored by result. Search stays on top, and the filter and clear options moved into menus." },
+                { "type": "Improved", "text": "Snipe details", "description": "The details window shows the timing on top, the biome result, and what happened step by step. Switch to Raw to see the full log." },
+                { "type": "Improved", "text": "Trigger list", "description": "Turn Join, Notify and Forward on or off right from each trigger. Hover a button to see what it does." },
+                { "type": "Improved", "text": "Trigger editor", "description": "The tabs are replaced by a side menu. Everything you need is in Essentials, and the optional sections show a dot when they are set up." },
+                { "type": "Added", "text": "Try your own messages in the match preview", "description": "Type a message under the preview to check if your trigger would match it." },
+                { "type": "Improved", "text": "Updates, Stats, Utilities and Developer tabs", "description": "Cleaner layouts, with tooltips that explain each option." }
+            ]
+        },
         {
             "version": "1.3.6",
             "entries": [

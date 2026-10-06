@@ -9,10 +9,10 @@ import { React, useReducer } from "@webpack/common";
 
 import { JoinLockStore, useJoinLock } from "../stores/JoinLockStore";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// --- Types ---
 
 export type JoinLockBannerVariant =
-    /** Compact, no explicit button — click anywhere to release. */
+    /** Compact, no button: click anywhere to release. */
     | "minimal"
     /** Full banner with an explicit "Clear" button. */
     | "full";
@@ -23,7 +23,7 @@ export interface JoinLockBannerProps {
     className?: string;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// --- Component ---
 
 export function JoinLockBanner({
     variant = "full",
@@ -86,7 +86,6 @@ export function JoinLockBanner({
                     whiteSpace: "nowrap",
                 }}>
                     Joins locked!
-                    {/* {" "} */}
                     <span style={{ paddingLeft: 4,opacity: 0.5 }}>
                     {isMinimal ? (
                         <>expires in {secsRemaining}s · click here to clear</>

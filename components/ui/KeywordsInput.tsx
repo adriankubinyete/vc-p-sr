@@ -11,7 +11,7 @@ import { Note } from "./Note";
 
 const DISCORD_ID_RE = /\d{17,20}/;
 
-// ─── KeywordChip ──────────────────────────────────────────────────────────────
+// --- KeywordChip ---
 
 function KeywordChip({ label, variant, onRemove }: {
     label: string;
@@ -52,7 +52,7 @@ function KeywordChip({ label, variant, onRemove }: {
     );
 }
 
-// ─── KeywordsInput ────────────────────────────────────────────────────────────
+// --- KeywordsInput ---
 
 export interface KeywordsInputProps {
     label: string;
@@ -120,7 +120,7 @@ export function KeywordsInput({
                 </span>
             )}
 
-            {/* ── Chip area ── */}
+            {/* Chip area */}
             <div
                 style={{
                     display: "flex", flexWrap: "wrap", alignItems: "center",
@@ -156,14 +156,14 @@ export function KeywordsInput({
                 Press <strong>Enter</strong> or <strong>,</strong> to add · <strong>Backspace</strong> to remove last
             </span>
 
-            {/* ── Discord ID warning ── */}
+            {/* Discord ID warning */}
             {showIdWarning && (
                 <Note variant="danger" style={{ marginTop: 6, fontSize: 12 }}>
                     If you are trying to match a role ID, please use the appropriate setting!
                 </Note>
             )}
 
-            {/* ── Strict match toggle ── */}
+            {/* Strict match toggle */}
             <div style={{
                 marginTop: 8, display: "flex", alignItems: "center",
                 justifyContent: "space-between", gap: 12,
@@ -175,7 +175,7 @@ export function KeywordsInput({
                         Strict match
                     </span>
                     <span style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
-                        When on, only matches the exact word — not partial matches.
+                        When on, only matches the exact word, not partial matches.
                     </span>
                 </div>
                 <FormSwitch title="" value={strict} onChange={onChangeStrict} hideBorder />
